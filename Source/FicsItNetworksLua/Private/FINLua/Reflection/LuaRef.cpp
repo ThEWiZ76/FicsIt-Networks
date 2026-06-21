@@ -212,6 +212,8 @@ namespace FINLua {
 			return luaFIN_argError(L, Ex.ArgumentIndex+2, Ex.GetMessage()); // TODO: Change Argument Index Offset for C++ ArgumentException
 		} catch (const FFIRReflectionException& Ex) {
 			return luaL_error(L, TCHAR_TO_UTF8(*Ex.GetMessage()));
+		} catch (const FFIRException& Ex) {
+			return luaL_error(L, TCHAR_TO_UTF8(*Ex.GetMessage()));
 		}
 
 		return luaFIN_callReflectionFunctionProcessOutput(L, Output, Ctx.GetTrace(), nResults);
@@ -276,24 +278,27 @@ UE_ENABLE_OPTIMIZATION_SHIP
 
 	int luaFIN_getProperty(lua_State* L, UFIRProperty* Property, const FFIRExecutionContext& PropertyCtx, lua_KContext kCtx, lua_KFunction kFunc) {
 		EFIRPropertyFlags PropFlags = Property->GetPropertyFlags();
-		// TODO: Add C++ try catch block to GetProperty Execution
-		if (PropFlags & FIR_Prop_RT_Async) {
-			ZoneScopedN("Lua Get Property");
-			luaFIN_pushNetworkValue(L, Property->GetValue(PropertyCtx));
-		} else if (PropFlags & FIR_Prop_RT_Parallel) {
-			ZoneScopedN("Lua Get Property SyncCall");
-			[[maybe_unused]] FLuaSync SyncCall(L);
-			{
+		try {
+			if (PropFlags & FIR_Prop_RT_Async) {
 				ZoneScopedN("Lua Get Property");
 				luaFIN_pushNetworkValue(L, Property->GetValue(PropertyCtx));
-			}
-		} else {
-			luaFIN_pushFuture(L, FFINFutureReflection(Property, PropertyCtx));
-			if (kFunc) {
-				luaFIN_await(L, -1, kCtx, kFunc);
+			} else if (PropFlags & FIR_Prop_RT_Parallel) {
+				ZoneScopedN("Lua Get Property SyncCall");
+				[[maybe_unused]] FLuaSync SyncCall(L);
+				{
+					ZoneScopedN("Lua Get Property");
+					luaFIN_pushNetworkValue(L, Property->GetValue(PropertyCtx));
+				}
 			} else {
-				luaFIN_await(L, -1);
+				luaFIN_pushFuture(L, FFINFutureReflection(Property, PropertyCtx));
+				if (kFunc) {
+					luaFIN_await(L, -1, kCtx, kFunc);
+				} else {
+					luaFIN_await(L, -1);
+				}
 			}
+		} catch (const FFIRException& Ex) {
+			return luaL_error(L, TCHAR_TO_UTF8(*Ex.GetMessage()));
 		}
 		return 1;
 	}
@@ -347,16 +352,19 @@ UE_ENABLE_OPTIMIZATION_SHIP
 				return true;
 			}
 
-			// TODO: Add C++ try catch block to SetProperty Execution
-			EFIRPropertyFlags PropFlags = Property->GetPropertyFlags();
-			if (PropFlags & FIR_Prop_RT_Async) {
-				Property->SetValue(PropertyCtx, Value.GetValue());
-			} else if (PropFlags & FIR_Prop_RT_Parallel) {
-				[[maybe_unused]] FLuaSync SyncCall(L);
-				Property->SetValue(PropertyCtx, Value.GetValue());
-			} else {
-				luaFIN_pushFuture(L, FFINFutureReflection(Property, PropertyCtx, Value.GetValue()));
-				luaFIN_await(L, -1);
+			try {
+				EFIRPropertyFlags PropFlags = Property->GetPropertyFlags();
+				if (PropFlags & FIR_Prop_RT_Async) {
+					Property->SetValue(PropertyCtx, Value.GetValue());
+				} else if (PropFlags & FIR_Prop_RT_Parallel) {
+					[[maybe_unused]] FLuaSync SyncCall(L);
+					Property->SetValue(PropertyCtx, Value.GetValue());
+				} else {
+					luaFIN_pushFuture(L, FFINFutureReflection(Property, PropertyCtx, Value.GetValue()));
+					luaFIN_await(L, -1);
+				}
+			} catch (const FFIRException& Ex) {
+				luaL_error(L, TCHAR_TO_UTF8(*Ex.GetMessage()));
 			}
 			return true;
 		}
