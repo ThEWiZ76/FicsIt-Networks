@@ -38,14 +38,24 @@ public:
 	UPROPERTY()
 	bool bColorChanged = false;
 
+	TSet<TWeakObjectPtr<AFGVehicle>> OverlappingVehicles;
+
 	AFINVehicleScanner();
 
 	// Begin AActor
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void BeginPlay() override;
-	virtual void NotifyActorBeginOverlap(AActor* OtherActor) override;
-	virtual void NotifyActorEndOverlap(AActor* OtherActor) override;
 	// End AActor
+
+	UFUNCTION()
+	void OnVehicleCollisionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	UFUNCTION()
+	void OnVehicleCollisionEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
+	void PollVehicleCollision();
+	void HandleVehicleEnter(AFGVehicle* Vehicle);
+	void HandleVehicleExit(AFGVehicle* Vehicle);
 
 	// Begin IFINSignalSender
 	virtual UObject* GetSignalSenderOverride_Implementation() override;
@@ -118,6 +128,19 @@ public:
 		ParameterDisplayNames.Add(FText::FromString("Vehicle"));
 		ParameterDescriptions.Add(FText::FromString("The vehicle that entered the scanner. null if it has already left the scanner."));
 		Runtime = 1;
+	}
+
+	UFUNCTION()
+	void netFunc_getDebug(int32& vehicleCount, float& nearestVehicleDistance, bool& nearestVehicleInside, FString& nearestVehicleClass, int32& actorCount, float& nearestActorDistance, FString& nearestActorClass, float& boxX, float& boxY, float& boxZ);
+	UFUNCTION()
+	void netFuncMeta_getDebug(FString& InternalName, FText& DisplayName, FText& Description, TArray<FString>& ParameterInternalNames, TArray<FText>& ParameterDisplayNames, TArray<FText>& ParameterDescriptions, int32& Runtime) {
+		InternalName = "getDebug";
+		DisplayName = FText::FromString("Get Debug");
+		Description = FText::FromString("Returns scanner diagnostics.");
+		ParameterInternalNames.Append({"vehicleCount", "nearestVehicleDistance", "nearestVehicleInside", "nearestVehicleClass", "actorCount", "nearestActorDistance", "nearestActorClass", "boxX", "boxY", "boxZ"});
+		ParameterDisplayNames.Append({FText::FromString("Vehicle Count"), FText::FromString("Nearest Vehicle Distance"), FText::FromString("Nearest Vehicle Inside"), FText::FromString("Nearest Vehicle Class"), FText::FromString("Actor Count"), FText::FromString("Nearest Actor Distance"), FText::FromString("Nearest Actor Class"), FText::FromString("Box X"), FText::FromString("Box Y"), FText::FromString("Box Z")});
+		ParameterDescriptions.Append({FText::FromString("Number of vehicle actors."), FText::FromString("Distance to nearest vehicle."), FText::FromString("True if nearest vehicle is inside the scanner box."), FText::FromString("Class name of nearest vehicle."), FText::FromString("Number of actors."), FText::FromString("Distance to nearest actor."), FText::FromString("Class name of nearest actor."), FText::FromString("Scanner box extent X."), FText::FromString("Scanner box extent Y."), FText::FromString("Scanner box extent Z.")});
+		Runtime = 2;
 	}
 
 	UFUNCTION(BlueprintNativeEvent)
