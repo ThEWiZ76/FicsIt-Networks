@@ -4,7 +4,10 @@
 
 #include "FGHealthComponent.h"
 #include "Buildables/FGBuildableDockingStation.h"
+#include "FGTrain.h"
+#include "FGRailroadVehicle.h"
 #include "Reflection/Source/Static/FIRTargetPoint.h"
+#include "Resources/FGItemDescriptor.h"
 #include "WheeledVehicles/FGTargetPoint.h"
 #include "WheeledVehicles/FGTargetPointLinkedList.h"
 #include "WheeledVehicles/FGWheeledVehicle.h"
@@ -19,7 +22,25 @@ public:
 
 	static void SetAutopilotEnabled(AFGWheeledVehicle* Vehicle, bool bEnabled) {
 		AFGWheeledVehicleIdentifier* Identifier = Vehicle ? Vehicle->GetVehicleIdentifier() : nullptr;
-		if (Identifier) Identifier->SetAutopilotEnabled(bEnabled);
+		if (!Identifier) throw FFIRException("vehicle has no route identifier");
+		if (bEnabled && !Identifier->CanEnableAutopilot()) throw FFIRException("autopilot cannot be enabled for this vehicle");
+		Identifier->SetAutopilotEnabled(bEnabled);
+	}
+
+	static bool IsSelfDriving(AFGVehicle* Vehicle) {
+		if (AFGWheeledVehicle* WheeledVehicle = Cast<AFGWheeledVehicle>(Vehicle)) {
+			return IsAutopilotEnabled(WheeledVehicle);
+		}
+		if (AFGRailroadVehicle* RailroadVehicle = Cast<AFGRailroadVehicle>(Vehicle)) {
+			AFGTrain* Train = RailroadVehicle->GetTrain();
+			return Train && Train->IsSelfDrivingEnabled();
+		}
+		return false;
+	}
+
+	static bool IsValidFuel(AFGWheeledVehicle* Vehicle, TSubclassOf<UFGItemDescriptor> Item) {
+		if (!Vehicle || !Item) return false;
+		return Vehicle->FilterFuelClasses(Item, 0);
 	}
 
 	static int32 GetCurrentTargetIndex(AFGWheeledVehicle* Vehicle) {
@@ -29,7 +50,15 @@ public:
 
 	static void SetCurrentTargetIndex(AFGWheeledVehicle* Vehicle, int32 Index) {
 		AFGWheeledVehicleIdentifier* Identifier = Vehicle ? Vehicle->GetVehicleIdentifier() : nullptr;
-		if (Identifier) Identifier->SetCurrentTargetWaypoint(Index);
+		if (!Identifier) throw FFIRException("vehicle has no route identifier");
+		const TArray<FGuid>& Route = Identifier->GetVehicleRoute();
+		if (Index != INDEX_NONE && !Route.IsValidIndex(Index)) throw FFIRException("route index out of range");
+		Identifier->SetCurrentTargetWaypoint(Index);
+	}
+
+	static AFGDrivingTargetList* GetLegacyTargetList(AFGWheeledVehicle* Vehicle) {
+		if (!Vehicle || !Vehicle->mTargetList) throw FFIRException("legacy target list is unavailable for this vehicle");
+		return Vehicle->mTargetList;
 	}
 
 	static AFGTargetPoint* FindTargetByIndex(AFGDrivingTargetList* List, int64 Index) {
@@ -103,7 +132,7 @@ BeginProp(RFloat, maxHealth, "Max Health", "The maximum amount of health this ve
 	FIRReturn 0.0f;
 } EndProp()
 BeginProp(RBool, isSelfDriving, "Is Self Driving", "True if the vehicle is currently self driving.") {
-	FIRReturn false;
+	FIRReturn FFIRVehicleHelper::IsSelfDriving(self);
 } EndProp()
 EndClass()
 
@@ -127,7 +156,7 @@ BeginFunc(isValidFuel, "Is Valid Fuel", "Allows to check if the given item type 
 	InVal(0, RClass<UFGItemDescriptor>, item, "Item", "The item type you want to check.")
 	OutVal(1, RBool, isValid, "Is Valid", "True if the given item type is a valid fuel for this vehicle.")
 	Body()
-	isValid = true;
+	isValid = FFIRVehicleHelper::IsValidFuel(self, item);
 } EndFunc()
 BeginFunc(getCurrentTarget, "Get Current Target", "Returns the index of the target that the vehicle tries to move to right now.") {
 	OutVal(0, RInt, index, "Index", "The index of the current target.")
@@ -137,15 +166,12 @@ BeginFunc(getCurrentTarget, "Get Current Target", "Returns the index of the targ
 BeginFunc(setCurrentTarget, "Set Current Target", "Sets the target with the given index as the target this vehicle tries to move to right now.") {
 	InVal(0, RInt, index, "Index", "The index of the target this vehicle should move to now.")
 	Body()
-	AFGDrivingTargetList* List = self->mTargetList;
-	AFGTargetPoint* Target = FFIRVehicleHelper::FindTargetByIndex(List, index);
-	if (!Target) throw FFIRException("index out of range");
 	FFIRVehicleHelper::SetCurrentTargetIndex(self, index);
 } EndFunc()
 BeginFunc(getTargetList, "Get Target List", "Returns the list of targets/path waypoints.") {
 	OutVal(0, RTrace<AFGDrivingTargetList>, targetList, "Target List", "The list of targets/path-waypoints.")
 	Body()
-	targetList = Ctx.GetTrace() / self->mTargetList;
+	targetList = Ctx.GetTrace() / FFIRVehicleHelper::GetLegacyTargetList(self);
 } EndFunc()
 BeginProp(RFloat, speed, "Speed", "The current forward speed of this vehicle.") {
 	FIRReturn self->GetForwardSpeed();
@@ -208,14 +234,25 @@ BeginFunc(getTargets, "Get Targets", "Returns a list of target point structs of 
 BeginFunc(setTargets, "Set Targets", "Removes all targets from the target point list and adds the given array of target point structs to the empty target point list.", 0) {
 	InVal(0, RArray<RStruct<FFIRTargetPoint>>, targets, "Targets", "A list of target point structs you want to place into the empty target point list.")
 	Body()
+	TArray<AFGTargetPoint*> NewTargets;
 	int Count = FFIRVehicleHelper::GetTargetCount(self);
 	for (const FIRAny& Target : targets) {
-		FFIRVehicleHelper::InsertItem(self, Target.GetStruct().Get<FFIRTargetPoint>().ToWheeledTargetPoint(self), self->mLast);
+		AFGTargetPoint* NewTarget = Target.GetStruct().Get<FFIRTargetPoint>().ToWheeledTargetPoint(self);
+		if (!NewTarget) {
+			for (AFGTargetPoint* CreatedTarget : NewTargets) {
+				if (CreatedTarget) CreatedTarget->Destroy();
+			}
+			throw FFIRException("failed to create target");
+		}
+		NewTargets.Add(NewTarget);
 	}
 	for (int i = 0; i < Count; ++i) {
 		AFGTargetPoint* Target = self->mFirst;
 		FFIRVehicleHelper::RemoveItem(self, Target);
 		if (Target) Target->Destroy();
+	}
+	for (AFGTargetPoint* NewTarget : NewTargets) {
+		FFIRVehicleHelper::InsertItem(self, NewTarget, self->mLast);
 	}
 } EndFunc()
 EndClass()
