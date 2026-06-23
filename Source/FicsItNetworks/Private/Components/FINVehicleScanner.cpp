@@ -10,6 +10,38 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 
+namespace {
+	bool IsActorInsideScannerBox(const AActor* Actor, const FTransform& ScannerTransform, const FVector& ScannerExtent) {
+		if (!Actor) return false;
+
+		const FBox Bounds = Actor->GetComponentsBoundingBox(true);
+		if (!Bounds.IsValid) {
+			const FVector LocalPosition = ScannerTransform.InverseTransformPosition(Actor->GetActorLocation());
+			return FMath::Abs(LocalPosition.X) <= ScannerExtent.X && FMath::Abs(LocalPosition.Y) <= ScannerExtent.Y && FMath::Abs(LocalPosition.Z) <= ScannerExtent.Z;
+		}
+
+		FVector LocalMin(TNumericLimits<float>::Max());
+		FVector LocalMax(-TNumericLimits<float>::Max());
+		for (int32 X = 0; X < 2; ++X) {
+			for (int32 Y = 0; Y < 2; ++Y) {
+				for (int32 Z = 0; Z < 2; ++Z) {
+					const FVector Corner(
+						X ? Bounds.Max.X : Bounds.Min.X,
+						Y ? Bounds.Max.Y : Bounds.Min.Y,
+						Z ? Bounds.Max.Z : Bounds.Min.Z);
+					const FVector LocalCorner = ScannerTransform.InverseTransformPosition(Corner);
+					LocalMin = LocalMin.ComponentMin(LocalCorner);
+					LocalMax = LocalMax.ComponentMax(LocalCorner);
+				}
+			}
+		}
+
+		return LocalMin.X <= ScannerExtent.X && LocalMax.X >= -ScannerExtent.X &&
+			LocalMin.Y <= ScannerExtent.Y && LocalMax.Y >= -ScannerExtent.Y &&
+			LocalMin.Z <= ScannerExtent.Z && LocalMax.Z >= -ScannerExtent.Z;
+	}
+}
+
 AFINVehicleScanner::AFINVehicleScanner() {
 	NetworkConnector = CreateDefaultSubobject<UFINAdvancedNetworkConnectionComponent>(TEXT("NetworkConnector"));
 	NetworkConnector->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
@@ -105,12 +137,10 @@ void AFINVehicleScanner::PollVehicleCollision() {
 
 	TArray<AActor*> Vehicles;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AFGVehicle::StaticClass(), Vehicles);
-	const FTransform InverseTransform = Transform.Inverse();
 	for (AActor* Actor : Vehicles) {
 		AFGVehicle* Vehicle = Cast<AFGVehicle>(Actor);
 		if (!Vehicle) continue;
-		const FVector LocalPosition = InverseTransform.TransformPosition(Vehicle->GetActorLocation());
-		if (FMath::Abs(LocalPosition.X) <= Extent.X && FMath::Abs(LocalPosition.Y) <= Extent.Y && FMath::Abs(LocalPosition.Z) <= Extent.Z) {
+		if (IsActorInsideScannerBox(Vehicle, Transform, Extent)) {
 			NewVehicles.Add(Vehicle);
 			if (!OverlappingVehicles.Contains(Vehicle)) HandleVehicleEnter(Vehicle);
 		}
@@ -199,8 +229,6 @@ void AFINVehicleScanner::netFunc_getDebug(int32& vehicleCount, float& nearestVeh
 	boxZ = Extent.Z;
 
 	const FVector ScannerLocation = ScannerTransform.GetLocation();
-	const FTransform InverseTransform = ScannerTransform.Inverse();
-
 	TArray<AActor*> Vehicles;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AFGVehicle::StaticClass(), Vehicles);
 	vehicleCount = Vehicles.Num();
@@ -210,8 +238,7 @@ void AFINVehicleScanner::netFunc_getDebug(int32& vehicleCount, float& nearestVeh
 		if (nearestVehicleDistance < 0.0f || Distance < nearestVehicleDistance) {
 			nearestVehicleDistance = Distance;
 			nearestVehicleClass = Actor->GetClass() ? Actor->GetClass()->GetName() : TEXT("");
-			const FVector LocalPosition = InverseTransform.TransformPosition(Actor->GetActorLocation());
-			nearestVehicleInside = FMath::Abs(LocalPosition.X) <= Extent.X && FMath::Abs(LocalPosition.Y) <= Extent.Y && FMath::Abs(LocalPosition.Z) <= Extent.Z;
+			nearestVehicleInside = IsActorInsideScannerBox(Actor, ScannerTransform, Extent);
 		}
 	}
 
