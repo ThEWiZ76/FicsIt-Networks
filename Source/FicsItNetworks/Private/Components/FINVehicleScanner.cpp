@@ -14,6 +14,8 @@
 #include "Reflection/FIRSignal.h"
 
 namespace {
+	constexpr int32 VehicleScannerExitDebounceTicks = 5;
+
 	void TriggerVehicleScannerSignal(UObject* Context, const FString& SignalName, AFGVehicle* Vehicle) {
 		UFIRClass* ReflectedClass = FFicsItReflectionModule::Get().FindClass(Context->GetClass());
 		if (!ReflectedClass) return;
@@ -114,12 +116,13 @@ void AFINVehicleScanner::BeginPlay() {
 
 void AFINVehicleScanner::OnVehicleCollisionBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult) {
 	AFGVehicle* Vehicle = Cast<AFGVehicle>(OtherActor);
-	if (Vehicle) HandleVehicleEnter(Vehicle);
+	if (Vehicle) {
+		VehicleMissCounts.FindOrAdd(Vehicle) = 0;
+		HandleVehicleEnter(Vehicle);
+	}
 }
 
 void AFINVehicleScanner::OnVehicleCollisionEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex) {
-	AFGVehicle* Vehicle = Cast<AFGVehicle>(OtherActor);
-	if (Vehicle) HandleVehicleExit(Vehicle);
 }
 
 void AFINVehicleScanner::PollVehicleCollision() {
@@ -139,12 +142,16 @@ void AFINVehicleScanner::PollVehicleCollision() {
 	GetWorld()->OverlapMultiByObjectType(Overlaps, Transform.GetLocation(), Transform.GetRotation(), ObjectTypes, FCollisionShape::MakeBox(Extent), QueryParams);
 
 	TSet<TWeakObjectPtr<AFGVehicle>> NewVehicles;
+	auto MarkVehicleSeen = [this, &NewVehicles](AFGVehicle* Vehicle) {
+		if (!Vehicle) return;
+		NewVehicles.Add(Vehicle);
+		VehicleMissCounts.FindOrAdd(Vehicle) = 0;
+		if (!OverlappingVehicles.Contains(Vehicle)) HandleVehicleEnter(Vehicle);
+	};
+
 	for (const FOverlapResult& Overlap : Overlaps) {
 		AFGVehicle* Vehicle = Cast<AFGVehicle>(Overlap.GetActor());
-		if (Vehicle) {
-			NewVehicles.Add(Vehicle);
-			if (!OverlappingVehicles.Contains(Vehicle)) HandleVehicleEnter(Vehicle);
-		}
+		MarkVehicleSeen(Vehicle);
 	}
 
 	TArray<AActor*> Vehicles;
@@ -152,22 +159,28 @@ void AFINVehicleScanner::PollVehicleCollision() {
 	for (AActor* Actor : Vehicles) {
 		AFGVehicle* Vehicle = Cast<AFGVehicle>(Actor);
 		if (!Vehicle) continue;
-		if (IsActorInsideScannerBox(Vehicle, Transform, Extent)) {
-			NewVehicles.Add(Vehicle);
-			if (!OverlappingVehicles.Contains(Vehicle)) HandleVehicleEnter(Vehicle);
-		}
+		if (IsActorInsideScannerBox(Vehicle, Transform, Extent)) MarkVehicleSeen(Vehicle);
 	}
 
-	for (const TWeakObjectPtr<AFGVehicle>& Vehicle : OverlappingVehicles) {
-		if (Vehicle.IsValid() && !NewVehicles.Contains(Vehicle)) HandleVehicleExit(Vehicle.Get());
+	TArray<TWeakObjectPtr<AFGVehicle>> CurrentVehicles = OverlappingVehicles.Array();
+	for (const TWeakObjectPtr<AFGVehicle>& Vehicle : CurrentVehicles) {
+		if (!Vehicle.IsValid()) {
+			OverlappingVehicles.Remove(Vehicle);
+			VehicleMissCounts.Remove(Vehicle);
+			continue;
+		}
+		if (NewVehicles.Contains(Vehicle)) continue;
+		int32& MissCount = VehicleMissCounts.FindOrAdd(Vehicle);
+		++MissCount;
+		if (MissCount >= VehicleScannerExitDebounceTicks) HandleVehicleExit(Vehicle.Get());
 	}
-	OverlappingVehicles = NewVehicles;
 	if (OverlappingVehicles.IsEmpty()) LastVehicle = nullptr;
 }
 
 void AFINVehicleScanner::HandleVehicleEnter(AFGVehicle* Vehicle) {
 	if (!Vehicle || OverlappingVehicles.Contains(Vehicle)) return;
 	OverlappingVehicles.Add(Vehicle);
+	VehicleMissCounts.FindOrAdd(Vehicle) = 0;
 	TriggerVehicleScannerSignal(this, TEXT("OnVehicleEnter"), Vehicle);
 	LastVehicle = Vehicle;
 }
@@ -175,6 +188,7 @@ void AFINVehicleScanner::HandleVehicleEnter(AFGVehicle* Vehicle) {
 void AFINVehicleScanner::HandleVehicleExit(AFGVehicle* Vehicle) {
 	if (!Vehicle || !OverlappingVehicles.Contains(Vehicle)) return;
 	OverlappingVehicles.Remove(Vehicle);
+	VehicleMissCounts.Remove(Vehicle);
 	TriggerVehicleScannerSignal(this, TEXT("OnVehicleExit"), Vehicle);
 	if (OverlappingVehicles.IsEmpty()) LastVehicle = nullptr;
 }

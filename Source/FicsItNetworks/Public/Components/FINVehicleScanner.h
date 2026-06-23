@@ -39,6 +39,7 @@ public:
 	bool bColorChanged = false;
 
 	TSet<TWeakObjectPtr<AFGVehicle>> OverlappingVehicles;
+	TMap<TWeakObjectPtr<AFGVehicle>, int32> VehicleMissCounts;
 
 	AFINVehicleScanner();
 
