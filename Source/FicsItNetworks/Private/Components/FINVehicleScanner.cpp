@@ -112,6 +112,7 @@ void AFINVehicleScanner::OnVehicleCollisionEndOverlap(UPrimitiveComponent* Overl
 }
 
 void AFINVehicleScanner::PollVehicleCollision() {
+	if (!IsInGameThread()) return;
 	if (!VehicleCollision || !GetWorld()) return;
 
 	TArray<FOverlapResult> Overlaps;
@@ -214,6 +215,7 @@ void AFINVehicleScanner::netFunc_getDebug(int32& vehicleCount, float& nearestVeh
 	boxY = 0.0f;
 	boxZ = 0.0f;
 
+	if (!IsInGameThread()) return;
 	if (!GetWorld()) return;
 
 	FTransform ScannerTransform = GetActorTransform();
