@@ -1,6 +1,7 @@
 ﻿#include "Components/FINVehicleScanner.h"
 #include "FGColoredInstanceMeshProxy.h"
 #include "FGVehicle.h"
+#include "FicsItReflection.h"
 #include "FINAdvancedNetworkConnectionComponent.h"
 #include "Components/BoxComponent.h"
 #include "Engine/CollisionProfile.h"
@@ -9,8 +10,18 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
+#include "Reflection/FIRClass.h"
+#include "Reflection/FIRSignal.h"
 
 namespace {
+	void TriggerVehicleScannerSignal(UObject* Context, const FString& SignalName, AFGVehicle* Vehicle) {
+		UFIRClass* ReflectedClass = FFicsItReflectionModule::Get().FindClass(Context->GetClass());
+		if (!ReflectedClass) return;
+		UFIRSignal* Signal = ReflectedClass->FindFIRSignal(SignalName);
+		if (!Signal) return;
+		Signal->Trigger(Context, {static_cast<FIRObj>(Vehicle)});
+	}
+
 	bool IsActorInsideScannerBox(const AActor* Actor, const FTransform& ScannerTransform, const FVector& ScannerExtent) {
 		if (!Actor) return false;
 
@@ -157,14 +168,14 @@ void AFINVehicleScanner::PollVehicleCollision() {
 void AFINVehicleScanner::HandleVehicleEnter(AFGVehicle* Vehicle) {
 	if (!Vehicle || OverlappingVehicles.Contains(Vehicle)) return;
 	OverlappingVehicles.Add(Vehicle);
-	netSig_OnVehicleEnter(Vehicle);
+	TriggerVehicleScannerSignal(this, TEXT("OnVehicleEnter"), Vehicle);
 	LastVehicle = Vehicle;
 }
 
 void AFINVehicleScanner::HandleVehicleExit(AFGVehicle* Vehicle) {
 	if (!Vehicle || !OverlappingVehicles.Contains(Vehicle)) return;
 	OverlappingVehicles.Remove(Vehicle);
-	netSig_OnVehicleExit(Vehicle);
+	TriggerVehicleScannerSignal(this, TEXT("OnVehicleExit"), Vehicle);
 	if (OverlappingVehicles.IsEmpty()) LastVehicle = nullptr;
 }
 
