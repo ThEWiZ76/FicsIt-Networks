@@ -70,9 +70,11 @@ AFINSignalSubsystem* AFINSignalSubsystem::GetSignalSubsystem(UObject* WorldConte
 void AFINSignalSubsystem::BroadcastSignal(UObject* Sender, const FFINSignalData& Signal) {
 	FFINSignalListeners* ListenerList = Senders.Find(Sender);
 	if (!ListenerList) return;
-	for (const FFIRTrace& ReceiverTrace : ListenerList->Listeners) {
-		if (&ReceiverTrace == nullptr) {
-			UE_LOG(LogFicsItNetworksCircuit, Warning, TEXT("SignalSubsystem: Invalid receiver trave. Sender: %s, ListenerList: %p, Listeners.Num(): %i"), *Sender->GetName(), ListenerList, ListenerList->Listeners.Num());
+	for (int i = ListenerList->Listeners.Num() - 1; i >= 0; --i) {
+		const FFIRTrace& ReceiverTrace = ListenerList->Listeners[i];
+		if (!ReceiverTrace.IsValidPtr()) {
+			UE_LOG(LogFicsItNetworksCircuit, Warning, TEXT("SignalSubsystem: Removing stale receiver trace. Sender: %s, ListenerList: %p, Listeners.Num(): %i"), *Sender->GetName(), ListenerList, ListenerList->Listeners.Num());
+			ListenerList->Listeners.RemoveAt(i);
 			continue;
 		}
 		IFINSignalListener* Receiver = Cast<IFINSignalListener>(ReceiverTrace.Get());

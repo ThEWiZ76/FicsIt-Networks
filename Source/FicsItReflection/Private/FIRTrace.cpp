@@ -113,7 +113,6 @@ void FFIRTrace::AddStructReferencedObjects(FReferenceCollector& ReferenceCollect
 	if (Obj) {
 		TObjectPtr<const UObject> Object = Obj;
 		ReferenceCollector.AddReferencedObject(Object);
-		if (Obj) Obj->CallAddReferencedObjects(ReferenceCollector);
 	}
 	if (Prev.IsValid()) {
 		Prev->AddStructReferencedObjects(ReferenceCollector);
