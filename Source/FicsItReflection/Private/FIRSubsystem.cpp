@@ -13,9 +13,11 @@ AFIRSubsystem* AFIRSubsystem::GetReflectionSubsystem(UObject* WorldContext) {
 #if WITH_EDITOR
 	return nullptr;
 #else
-	UWorld* WorldObject = GEngine->GetWorldFromContextObjectChecked(WorldContext);
+	if (!WorldContext || !::IsValid(WorldContext)) return nullptr;
+	UWorld* WorldObject = GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::ReturnNull);
+	if (!WorldObject) return nullptr;
 	USubsystemActorManager* SubsystemActorManager = WorldObject->GetSubsystem<USubsystemActorManager>();
-	fgcheck(SubsystemActorManager);
+	if (!SubsystemActorManager) return nullptr;
 	return SubsystemActorManager->GetSubsystemActor<AFIRSubsystem>();
 #endif
 }

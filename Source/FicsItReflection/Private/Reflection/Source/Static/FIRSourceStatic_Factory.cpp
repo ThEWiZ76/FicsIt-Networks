@@ -158,23 +158,27 @@ BeginProp(RBool, isConnected, "Is Connected", "True if something is connected to
 	FIRReturn self->IsConnected();
 } EndProp()
 BeginProp(RClass<UFGItemDescriptor>, allowedItem, "Allowed Item", "This item type defines which items are the only ones this connector can transfer. Null allows all items to be transfered.") {
-	FIRReturn (FIRClass)AFIRSubsystem::GetReflectionSubsystem(self)->GetFactoryConnectorAllowedItem(self);
+	AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self);
+	FIRReturn (FIRClass)(Subsystem ? Subsystem->GetFactoryConnectorAllowedItem(self) : nullptr);
 } PropSet() {
-	AFIRSubsystem::GetReflectionSubsystem(self)->SetFactoryConnectorAllowedItem(self, Val);
+	if (AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self)) Subsystem->SetFactoryConnectorAllowedItem(self, Val);
 } EndProp()
 BeginProp(RBool, blocked, "Blocked", "True if this connector doesn't transfer any items except the 'Unblocked Transfers'.") {
-	FIRReturn AFIRSubsystem::GetReflectionSubsystem(self)->GetFactoryConnectorBlocked(self);
+	AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self);
+	FIRReturn (Subsystem ? Subsystem->GetFactoryConnectorBlocked(self) : false);
 } PropSet() {
-	AFIRSubsystem::GetReflectionSubsystem(self)->SetFactoryConnectorBlocked(self, Val);
+	if (AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self)) Subsystem->SetFactoryConnectorBlocked(self, Val);
 } EndProp()
 BeginProp(RInt, unblockedTransfers, "Unblocked Transfers", "The count of transfers that can still happen even if the connector is blocked. Use the 'AddUnblockedTransfers' function to change this. The count decreases by one when an item gets transfered.") {
-	FIRReturn AFIRSubsystem::GetReflectionSubsystem(self)->GetFactoryConnectorUnblockedTransfers(self);
+	AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self);
+	FIRReturn (Subsystem ? Subsystem->GetFactoryConnectorUnblockedTransfers(self) : 0);
 } EndProp()
 BeginFunc(addUnblockedTransfers, "Add Unblocked Transfers", "Adds the given count to the unblocked transfers counter. The resulting value gets clamped to >= 0. Negative values allow to decrease the counter manually. The returning int is the now set count.") {
 	InVal(0, RInt, unblockedTransfers, "Unblocked Transfers", "The count of unblocked transfers to add.")
 	OutVal(1, RInt, newUnblockedTransfers, "New Unblocked Transfers", "The new count of unblocked transfers.")
 	Body()
-	newUnblockedTransfers = (FIRInt) AFIRSubsystem::GetReflectionSubsystem(self)->AddFactoryConnectorUnblockedTransfers(self, unblockedTransfers);
+	AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self);
+	newUnblockedTransfers = (FIRInt)(Subsystem ? Subsystem->AddFactoryConnectorUnblockedTransfers(self, unblockedTransfers) : 0);
 } EndFunc()
 BeginFunc(getInventory, "Get Inventory", "Returns the internal inventory of the connection component.") {
 	OutVal(0, RTrace<UFGInventoryComponent>, inventory, "Inventory", "The internal inventory of the connection component.")
