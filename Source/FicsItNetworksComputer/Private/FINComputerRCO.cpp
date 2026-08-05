@@ -2,6 +2,8 @@
 
 #include "FINComputerCase.h"
 #include "FINComputerEEPROMDesc.h"
+#include "FicsItReflection.h"
+#include "FIRAnyValue.h"
 #include "FicsItKernel/Processor/FINItemStateEEPROMText.h"
 #include "FINNetworkComponent.h"
 #include "ComputerModules/FINComputerDriveHolder.h"
@@ -9,6 +11,19 @@
 #include "ComputerModules/PCI/FINComputerGPUT2.h"
 #include "FicsItKernel/Processor/FINStateEEPROM_Legacy.h"
 #include "Net/UnrealNetwork.h"
+#include "Reflection/FIRClass.h"
+#include "Reflection/FIRSignal.h"
+
+namespace {
+	void TriggerGPUT2Signal(AFINComputerGPUT2* GPU, const FString& SignalName, const TArray<FFIRAnyValue>& Parameters) {
+		if (!IsValid(GPU)) return;
+		UFIRClass* ReflectedClass = FFicsItReflectionModule::Get().FindClass(GPU->GetClass());
+		if (!ReflectedClass) return;
+		UFIRSignal* Signal = ReflectedClass->FindFIRSignal(SignalName);
+		if (!Signal) return;
+		Signal->Trigger(GPU, Parameters);
+	}
+}
 
 void UFINComputerRCO::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -92,19 +107,19 @@ void UFINComputerRCO::CopyDataItem_Implementation(UFGInventoryComponent* InProvi
 void UFINComputerRCO::GPUT2MouseEvent_Implementation(AFINComputerGPUT2* GPU, int Type, FVector2D Position, int Modifiers) {
 	switch (Type) {
 	case 0:
-		GPU->netSig_OnMouseDown(Position, Modifiers);
+		TriggerGPUT2Signal(GPU, TEXT("OnMouseDown"), {FIRStruct(Position), static_cast<FIRInt>(Modifiers)});
 		break;
 	case 1:
-		GPU->netSig_OnMouseUp(Position, Modifiers);
+		TriggerGPUT2Signal(GPU, TEXT("OnMouseUp"), {FIRStruct(Position), static_cast<FIRInt>(Modifiers)});
 		break;
 	case 2:
-		GPU->netSig_OnMouseMove(Position, Modifiers);
+		TriggerGPUT2Signal(GPU, TEXT("OnMouseMove"), {FIRStruct(Position), static_cast<FIRInt>(Modifiers)});
 		break;
 	case 3:
-		GPU->netSig_OnMouseEnter(Position, Modifiers);
+		TriggerGPUT2Signal(GPU, TEXT("OnMouseEnter"), {FIRStruct(Position), static_cast<FIRInt>(Modifiers)});
 		break;
 	case 4:
-		GPU->netSig_OnMouseLeave(Position, Modifiers);
+		TriggerGPUT2Signal(GPU, TEXT("OnMouseLeave"), {FIRStruct(Position), static_cast<FIRInt>(Modifiers)});
 		break;
 	default: break;
 	}
@@ -113,21 +128,21 @@ void UFINComputerRCO::GPUT2MouseEvent_Implementation(AFINComputerGPUT2* GPU, int
 void UFINComputerRCO::GPUT2KeyEvent_Implementation(AFINComputerGPUT2* GPU, int Type, int64 C, int64 Code, int Modifiers) {
 	switch (Type) {
 	case 0:
-		GPU->netSig_OnKeyDown(C, Code, Modifiers);
+		TriggerGPUT2Signal(GPU, TEXT("OnKeyDown"), {static_cast<FIRInt>(C), static_cast<FIRInt>(Code), static_cast<FIRInt>(Modifiers)});
 		break;
 	case 1:
-		GPU->netSig_OnKeyUp(C, Code, Modifiers);
+		TriggerGPUT2Signal(GPU, TEXT("OnKeyUp"), {static_cast<FIRInt>(C), static_cast<FIRInt>(Code), static_cast<FIRInt>(Modifiers)});
 		break;
 	default: break;
 	}
 }
 
 void UFINComputerRCO::GPUT2KeyCharEvent_Implementation(AFINComputerGPUT2* GPU, const FString& C, int Modifiers) {
-	GPU->netSig_OnKeyChar(C, Modifiers);
+	TriggerGPUT2Signal(GPU, TEXT("OnKeyChar"), {C, static_cast<FIRInt>(Modifiers)});
 }
 
 void UFINComputerRCO::GPUT2MouseWheelEvent_Implementation(AFINComputerGPUT2* GPU, FVector2D Position, float Delta, int Modifiers) {
-	GPU->netSig_OnMouseWheel(Position, Delta, Modifiers);
+	TriggerGPUT2Signal(GPU, TEXT("OnMouseWheel"), {FIRStruct(Position), static_cast<FIRFloat>(Delta), static_cast<FIRInt>(Modifiers)});
 }
 
 void UFINComputerRCO::SetLabel_Implementation(UFGInventoryComponent* Inventory, int32 Index, const FString& Label) {
