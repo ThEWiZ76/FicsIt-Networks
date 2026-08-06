@@ -220,6 +220,10 @@ BeginFunc(getMovement, "Get Movement", "Returns the vehicle movement of this veh
 	Body()
 	movement = Ctx.GetTrace() / self->GetRailroadVehicleMovementComponent();
 } EndFunc()
+BeginProp(RFloat, speed, "Speed", "The signed forward speed of this vehicle in centimeters per second.") {
+	UFGRailroadVehicleMovementComponent* movement = self->GetRailroadVehicleMovementComponent();
+	FIRReturn (movement ? movement->GetForwardSpeed() : 0.0f);
+} EndProp()
 BeginProp(RFloat, length, "Length", "The length of this vehicle on the track.") {
 	FIRReturn self->GetLength();
 } EndProp()
@@ -415,6 +419,9 @@ BeginFunc(getVehicles, "Get Vehicles", "Returns a list of all the vehicles this 
 	}
 	vehicles = Vehicles;
 } EndFunc()
+BeginProp(RFloat, speed, "Speed", "The signed forward speed of this train in centimeters per second.") {
+	FIRReturn self->mSimulationData.Velocity;
+} EndProp()
 BeginProp(RBool, isPlayerDriven, "Is Player Driven", "True if the train is currently player driven.") {
 	FIRReturn self->IsPlayerDriven();
 } EndProp()
