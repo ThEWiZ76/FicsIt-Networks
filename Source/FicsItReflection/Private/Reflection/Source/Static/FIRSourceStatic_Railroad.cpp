@@ -471,7 +471,7 @@ BeginFunc(getStops, "Get Stops", "Returns a list of all the stops this time tabl
 	}
 	stops = Output;
 } EndFunc()
-BeginFunc(setStops, "Set Stops", "Allows to empty and fill the stops of this time table with the given list of new stops.") {
+BeginFunc(setStops, "Set Stops", "Allows to empty and fill the stops of this time table with the given list of new stops.", 0) {
 	InVal(0, RArray<RStruct<FFIRTimeTableStop>>, stops, "Stops", "The new time table stops.")
 	OutVal(1, RBool, gotSet, "Got Set", "True if the stops got sucessfully set.")
 	Body()
@@ -498,7 +498,7 @@ BeginFunc(getStop, "Get Stop", "Returns the stop at the given index.") {
 		stop = FIRAny();
 	}
 } EndFunc()
-BeginFunc(setStop, "Set Stop", "Allows to override a stop already in the time table.") {
+BeginFunc(setStop, "Set Stop", "Allows to override a stop already in the time table.", 0) {
 	InVal(0, RInt, index, "Index", "The zero-based index of the stop you want to override.")
 	InVal(1, RStruct<FFIRTimeTableStop>, stop, "Stop", "The time table stop you want to override with.")
 	OutVal(2, RBool, success, "Success", "True if setting was successful, false if not, f.e. invalid index.")
