@@ -29,6 +29,29 @@ void AFIRSubsystem::BeginPlay() {
 		ForcedRailroadSwitchCleanup(Force.Value, Force.Key);
 		UpdateRailroadSwitch(Force.Value, Force.Key);
 	}
+
+	for (auto It = ForcedRedRailroadSignals.CreateIterator(); It; ++It) {
+		if (IsValid(*It)) {
+			UpdateRailroadSignalAspect(*It);
+		} else {
+			It.RemoveCurrent();
+		}
+	}
+}
+
+void AFIRSubsystem::RegisterRailroadSignalHooks() {
+	SUBSCRIBE_METHOD_AFTER(AFGBuildableRailroadSignal::UpdateAspect, [](AFGBuildableRailroadSignal* self) {
+		if (AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self)) {
+			Subsystem->UpdateRailroadSignalAspect(self);
+		}
+	});
+
+	SUBSCRIBE_METHOD_VIRTUAL_AFTER(AFGBuildableRailroadSignal::EndPlay, (void*)GetDefault<AFGBuildableRailroadSignal>(), [](AActor* self, EEndPlayReason::Type Reason) {
+		if (Reason == EEndPlayReason::Destroyed && self->GetWorld()) {
+			AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self);
+			if (Subsystem) Subsystem->SetRailroadSignalForcedRed(Cast<AFGBuildableRailroadSignal>(self), false);
+		}
+	});
 }
 
 void AFIRSubsystem::ForceRailroadSwitch(UFGRailroadTrackConnectionComponent* RailroadSwitch, int64 Track) {
@@ -54,6 +77,41 @@ FFIRRailroadSwitchForce* AFIRSubsystem::GetForcedRailroadSwitch(UFGRailroadTrack
 
 FFIRRailroadSwitchForce* AFIRSubsystem::GetForcedRailroadSwitch_Unsafe(UFGRailroadTrackConnectionComponent* RailroadSwitch) {
 	return ForcedRailroadSwitches.Find(RailroadSwitch);
+}
+
+void AFIRSubsystem::SetRailroadSignalForcedRed(AFGBuildableRailroadSignal* RailroadSignal, bool bForcedRed) {
+	if (!RailroadSignal) return;
+
+	if (bForcedRed) {
+		if (!IsValid(RailroadSignal)) return;
+		ForcedRedRailroadSignals.Add(RailroadSignal);
+		UpdateRailroadSignalAspect(RailroadSignal);
+	} else {
+		const bool bWasForcedRed = ForcedRedRailroadSignals.Remove(RailroadSignal) > 0;
+		if (bWasForcedRed && IsValid(RailroadSignal) && !RailroadSignal->IsActorBeingDestroyed()) {
+			RailroadSignal->UpdateAspect();
+		}
+	}
+}
+
+bool AFIRSubsystem::IsRailroadSignalForcedRed(AFGBuildableRailroadSignal* RailroadSignal) const {
+	return RailroadSignal && ForcedRedRailroadSignals.Contains(RailroadSignal);
+}
+
+void AFIRSubsystem::UpdateRailroadSignalAspect(AFGBuildableRailroadSignal* RailroadSignal) {
+	if (!IsValid(RailroadSignal) || !ForcedRedRailroadSignals.Contains(RailroadSignal) || RailroadSignal->mAspect == ERailroadSignalAspect::RSA_Stop) return;
+
+	const ERailroadSignalAspect PreviousAspect = RailroadSignal->mAspect;
+	RailroadSignal->mAspect = ERailroadSignalAspect::RSA_Stop;
+	if (UFunction* OnRepAspect = RailroadSignal->FindFunction(TEXT("OnRep_Aspect"))) {
+		struct {
+			ERailroadSignalAspect previousAspect;
+		} Params{PreviousAspect};
+		RailroadSignal->ProcessEvent(OnRepAspect, &Params);
+	} else {
+		RailroadSignal->mOnAspectChangedDelegate.Broadcast(RailroadSignal->mAspect);
+	}
+	RailroadSignal->ForceNetUpdate();
 }
 
 void AFIRSubsystem::UpdateRailroadSwitch(FFIRRailroadSwitchForce& Force, UFGRailroadTrackConnectionComponent* Switch) {

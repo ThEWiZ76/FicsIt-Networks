@@ -7,6 +7,7 @@
 #include "FIRSubsystem.generated.h"
 
 class UFGRailroadTrackConnectionComponent;
+class AFGBuildableRailroadSignal;
 class UFGItemDescriptor;
 class UFGFactoryConnectionComponent;
 
@@ -50,9 +51,14 @@ public:
 	virtual bool ShouldSave_Implementation() const override { return true; }
 	// End IFGSaveInterface
 
+	static void RegisterRailroadSignalHooks();
+
 	void ForceRailroadSwitch(UFGRailroadTrackConnectionComponent* RailroadSwitch, int64 Track);
 	FFIRRailroadSwitchForce* GetForcedRailroadSwitch(UFGRailroadTrackConnectionComponent* RailroadSwitch);
 	FFIRRailroadSwitchForce* GetForcedRailroadSwitch_Unsafe(UFGRailroadTrackConnectionComponent* RailroadSwitch);
+	void SetRailroadSignalForcedRed(AFGBuildableRailroadSignal* RailroadSignal, bool bForcedRed);
+	bool IsRailroadSignalForcedRed(AFGBuildableRailroadSignal* RailroadSignal) const;
+	void UpdateRailroadSignalAspect(AFGBuildableRailroadSignal* RailroadSignal);
 
 	static void AddRailroadSwitchConnection(CallScope<void(*)(UFGRailroadTrackConnectionComponent*,UFGRailroadTrackConnectionComponent*)>& Scope, UFGRailroadTrackConnectionComponent* Switch, UFGRailroadTrackConnectionComponent* Connection);
 	static void RemoveRailroadSwitchConnection(CallScope<void(*)(UFGRailroadTrackConnectionComponent*,UFGRailroadTrackConnectionComponent*)>& Scope, UFGRailroadTrackConnectionComponent* Switch, UFGRailroadTrackConnectionComponent* Connection);
@@ -81,6 +87,9 @@ private:
 
 	UPROPERTY(SaveGame)
 	TMap<UFGRailroadTrackConnectionComponent*, FFIRRailroadSwitchForce> ForcedRailroadSwitches;
+
+	UPROPERTY(SaveGame)
+	TSet<AFGBuildableRailroadSignal*> ForcedRedRailroadSignals;
 
 	FRWLock FactoryConnectorSettingsMutex;
 	UPROPERTY(SaveGame)

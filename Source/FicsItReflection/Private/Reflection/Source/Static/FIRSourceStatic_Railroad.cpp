@@ -736,6 +736,17 @@ BeginProp(RInt, blockValidation, "Block Validation", "Any error states of the bl
 BeginProp(RInt, aspect, "Aspect", "The aspect of the signal. The aspect shows if a train is allowed to pass (clear) or not and if it should dock.\n0 = Unknown\n1 = The track is clear and the train is allowed to pass.\n2 = The next track is Occupied and the train should stop\n3 = The train should dock.") {
 	FIRReturn (int64)self->GetAspect();
 } EndProp()
+BeginProp(RBool, isForcedRed, "Is Forced Red", "True if this signal is currently forced to show a stop aspect by FicsIt-Networks.", 0) {
+	AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self);
+	FIRReturn (Subsystem && Subsystem->IsRailroadSignalForcedRed(self));
+} EndProp()
+BeginFunc(setForceRed, "Set Force Red", "Forces this signal to show a stop aspect until released. This does not cancel existing path reservations.", 0) {
+	InVal(0, RBool, forcedRed, "Forced Red", "True to force the signal to stop, false to restore its automatic aspect.")
+	Body()
+	if (AFIRSubsystem* Subsystem = AFIRSubsystem::GetReflectionSubsystem(self)) {
+		Subsystem->SetRailroadSignalForcedRed(self, forcedRed);
+	}
+} EndFunc()
 BeginFunc(getObservedBlock, "Get Observed Block", "Returns the track block this signals observes.") {
 	OutVal(0, RStruct<FFIRRailroadSignalBlock>, block, "Block", "The railroad signal block this signal is observing.")
 	Body()
