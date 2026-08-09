@@ -1,17 +1,11 @@
 #include "FicsItKernel/FicsItFS/FINFileSystemState_Legacy.h"
 
+#include "HAL/PlatformMisc.h"
 #include "Misc/App.h"
 #include "FGInventoryComponent.h"
 #include "FINComputerSubsystem.h"
-#include "Engine/Engine.h"
 #include "FileSystemSerializationInfo.h"
-#include "Framework/Application/SlateApplication.h"
 #include "Net/UnrealNetwork.h"
-#include "Widgets/Input/SButton.h"
-#include "Widgets/Layout/SBox.h"
-#include "Widgets/Text/STextBlock.h"
-#include "Widgets/Input/SCheckBox.h"
-#include "Widgets/SViewport.h"
 
 #define KEEP_CHANGES 1
 #define OVERRIDE_CHANGES 0
@@ -29,84 +23,26 @@ int AskForDiskOrSave_Legacy(FString Name) {
 	default: ;
 	}
 	
-	int KeepDisk = 0;
-	bool bDontAskAgain = false;
-	TSharedRef<SWindow> Window = SNew(SWindow)
-		.HasCloseButton(false)
-		.ActivationPolicy(EWindowActivationPolicy::Always)
-		.FocusWhenFirstShown(true)
-		.SizingRule(ESizingRule::Autosized)
-		.Title(FText::FromString(FString::Printf(TEXT("FileSystem Content difference in FS '%s' found!"), *Name)))
-		.Content()[
-			SNew(SVerticalBox)
-			+SVerticalBox::Slot()
-			.FillHeight(1)[
-				SNew(SBox)
-				.MinDesiredHeight(100)
-				.MinDesiredWidth(100)[
-					SNew(STextBlock)
-					.Text(FText::FromString(FString::Printf(TEXT("It appears as if the disk filesystem of a drive "
-						"or floppy of yours is different from the content that is saved in the save file you are currently trying to load.\n\n"
-						"Do you want to keep the content on the disk or overwrite it with the content in the save file?\n\n"
-						"FileSystem UUID:'%s'"), *Name)))
-				]
-			]
-			+SVerticalBox::Slot()
-			.AutoHeight()[
-				SNew(SHorizontalBox)
-				+SHorizontalBox::Slot()
-				.AutoWidth()
-				.HAlign(HAlign_Left)[
-					SNew(SButton)
-					.Text(FText::FromString("Keep changes on disk"))
-					.OnClicked_Lambda([&KeepDisk, &Window]() {
-						KeepDisk = KEEP_CHANGES;
-						Window->RequestDestroyWindow();
-						return FReply::Handled();
-					})]
-				+SHorizontalBox::Slot()
-				.AutoWidth()
-				.HAlign(HAlign_Left)[
-					SNew(SButton)
-					.Text(FText::FromString(TEXT("Overwrite with Save")))
-					.OnClicked_Lambda([&KeepDisk, &Window]() {
-						KeepDisk = OVERRIDE_CHANGES;
-						Window->RequestDestroyWindow();
-						return FReply::Handled();
-					})
-				]
-				+SHorizontalBox::Slot()
-				.FillWidth(1)
-				.HAlign(HAlign_Right)[
-					SNew(SCheckBox)
-					.Content()[
-						SNew(STextBlock)
-						.Text(FText::FromString(TEXT("Don't ask again")))
-					]
-					.IsChecked_Lambda([&]() {
-						return bDontAskAgain ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
-					})
-					.OnCheckStateChanged_Lambda([&](ECheckBoxState State) {
-						bDontAskAgain = State == ECheckBoxState::Checked;
-					})
-				]
-			]
-		];
-	FSlateApplication::Get().AddModalWindow(Window, GEngine->GetGameViewportWidget());
+	const FString Caption = FString::Printf(TEXT("FileSystem Content difference in FS '%s' found!"), *Name);
+	const FString Message = FString::Printf(TEXT("The disk filesystem of a drive or floppy differs from the content in the save file.\n\n"
+		"Choose Yes to keep the content on disk, or No to overwrite it with the content from the save.\n"
+		"Yes to All and No to All apply the same choice to all remaining file systems.\n\n"
+		"FileSystem UUID: '%s'"), *Name);
+	const EAppReturnType::Type Result = FPlatformMisc::MessageBoxExt(EAppMsgType::YesNoYesAllNoAll, *Message, *Caption);
 
-	if (bDontAskAgain) {
-		switch (KeepDisk) {
-		case KEEP_CHANGES:
+	switch (Result) {
+		case EAppReturnType::Yes:
+			return KEEP_CHANGES;
+		case EAppReturnType::YesAll:
 			AFINComputerSubsystem::SetFSAlways(FIN_FS_AlwaysKeep);
-			break;
-		case OVERRIDE_CHANGES:
+			return KEEP_CHANGES;
+		case EAppReturnType::NoAll:
 			AFINComputerSubsystem::SetFSAlways(FIN_FS_AlwaysOverride);
-			break;
-		default: ;
-		}
+			return OVERRIDE_CHANGES;
+		case EAppReturnType::No:
+		default:
+			return OVERRIDE_CHANGES;
 	}
-	
-	return KeepDisk;
 }
 
 #define CheckKeepDisk(Condition) \
@@ -156,10 +92,12 @@ void AFINFileSystemState_Legacy::SerializePath(TSharedRef<CodersFileSystem::Devi
 			DiskChilds.erase(stdChildName);
 		}
 
-		CodersFileSystem::FileType ChildType = *SerializeDevice->fileType(Path / stdChildName);
 		int Type = 0;
-		if (ChildType == CodersFileSystem::File_Regular) Type = 1;
-		if (ChildType == CodersFileSystem::File_Directory) Type = 2;
+		if (bIsSaving) {
+			TOptional<CodersFileSystem::FileType> ChildType = SerializeDevice->fileType(Path / stdChildName);
+			if (ChildType.IsSet() && *ChildType == CodersFileSystem::File_Regular) Type = 1;
+			if (ChildType.IsSet() && *ChildType == CodersFileSystem::File_Directory) Type = 2;
+		}
 		Child.EnterField(TEXT("Type")) << Type;
 		TOptional<CodersFileSystem::FileType> existingType = SerializeDevice->fileType(Path / stdChildName);
 		if (Type == 1) {
