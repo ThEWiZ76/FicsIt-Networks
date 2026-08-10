@@ -2,6 +2,10 @@
 
 #include "UI/FINLuaSyntax.h"
 #include "FINUtils.h"
+#include "Framework/Text/ILayoutBlock.h"
+#include "Framework/Text/ISlateRun.h"
+#include "Framework/Text/ISlateRunRenderer.h"
+#include "Rendering/DrawElements.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
 #include "tracy/Tracy.hpp"
@@ -143,6 +147,91 @@ const TArray<TSharedRef<SWidget>>& FFINTabRun::GetChildren() {
 
 void FFINTabRun::ArrangeChildren(const TSharedRef<ILayoutBlock>& Block, const FGeometry& AllottedGeometry, FArrangedChildren& ArrangedChildren) const {}
 
+namespace {
+	TPair<int32, int32> GetVisibleLineViewRange(const FTextLayout& Layout) {
+		const TArray<FTextLayout::FLineView>& LineViews = Layout.GetLineViews();
+		const float VisibleBottom = Layout.GetViewSize().Y * Layout.GetScale();
+
+		int32 FirstVisibleLine = 0;
+		int32 SearchEnd = LineViews.Num();
+		while (FirstVisibleLine < SearchEnd) {
+			const int32 Middle = FirstVisibleLine + (SearchEnd - FirstVisibleLine) / 2;
+			const FTextLayout::FLineView& LineView = LineViews[Middle];
+			if (LineView.Offset.Y + LineView.Size.Y < 0.0f) {
+				FirstVisibleLine = Middle + 1;
+			} else {
+				SearchEnd = Middle;
+			}
+		}
+
+		int32 LastVisibleLine = FirstVisibleLine;
+		while (LastVisibleLine < LineViews.Num() && LineViews[LastVisibleLine].Offset.Y <= VisibleBottom) {
+			++LastVisibleLine;
+		}
+
+		return TPair<int32, int32>(FirstVisibleLine, LastVisibleLine);
+	}
+
+	class FFINSlateTextLayout : public FSlateTextLayout {
+	public:
+		static TSharedRef<FFINSlateTextLayout> Create(SWidget* InOwner, FTextBlockStyle InDefaultTextStyle) {
+			TSharedRef<FFINSlateTextLayout> Layout = MakeShareable(new FFINSlateTextLayout(InOwner, MoveTemp(InDefaultTextStyle)));
+			Layout->AggregateChildren();
+			return Layout;
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override {
+			if (TextOverflowPolicyOverride.Get(DefaultTextStyle.OverflowPolicy) != ETextOverflowPolicy::Clip) {
+				return FSlateTextLayout::OnPaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
+			}
+
+			const float InverseScale = Inverse(AllottedGeometry.Scale);
+			int32 HighestLayerId = LayerId;
+
+			auto IsAtLeastPartiallyVisible = [&AllottedGeometry, InverseScale, &MyCullingRect](FVector2D Offset, FVector2D Size) {
+				const FVector2D LocalLineOffset = Offset * InverseScale;
+				const FSlateRect Rect(AllottedGeometry.GetRenderBoundingRect(FSlateRect(LocalLineOffset, LocalLineOffset + Size * InverseScale)));
+				return FSlateRect::DoRectanglesIntersect(Rect, MyCullingRect);
+			};
+
+			const TPair<int32, int32> VisibleLines = GetVisibleLineViewRange(*this);
+			for (int32 LineIndex = VisibleLines.Key; LineIndex < VisibleLines.Value; ++LineIndex) {
+				const FTextLayout::FLineView& LineView = LineViews[LineIndex];
+				if (!IsAtLeastPartiallyVisible(LineView.Offset, LineView.Size)) {
+					continue;
+				}
+
+				const int32 HighestUnderlayLayerId = OnPaintHighlights(Args, LineView, LineView.UnderlayHighlights, DefaultTextStyle, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
+				const int32 TextLayer = HighestUnderlayLayerId + 1;
+				int32 HighestBlockLayerId = TextLayer;
+
+				for (const TSharedRef<ILayoutBlock>& Block : LineView.Blocks) {
+					if (!IsAtLeastPartiallyVisible(Block->GetLocationOffset(), Block->GetSize())) {
+						continue;
+					}
+
+					FTextArgs TextArgs(LineView, Block, DefaultTextStyle, ETextOverflowPolicy::Clip, ETextOverflowDirection::NoOverflow);
+					const TSharedRef<ISlateRun> Run = StaticCastSharedRef<ISlateRun>(Block->GetRun());
+					const TSharedPtr<ISlateRunRenderer> RunRenderer = StaticCastSharedPtr<ISlateRunRenderer>(Block->GetRenderer());
+					const int32 HighestRunLayerId = RunRenderer.IsValid()
+						? RunRenderer->OnPaint(Args, LineView, Run, Block, DefaultTextStyle, AllottedGeometry, MyCullingRect, OutDrawElements, TextLayer, InWidgetStyle, bParentEnabled)
+						: Run->OnPaint(Args, TextArgs, AllottedGeometry, MyCullingRect, OutDrawElements, TextLayer, InWidgetStyle, bParentEnabled);
+					HighestBlockLayerId = FMath::Max(HighestBlockLayerId, HighestRunLayerId);
+				}
+
+				const int32 HighestOverlayLayerId = OnPaintHighlights(Args, LineView, LineView.OverlayHighlights, DefaultTextStyle, AllottedGeometry, MyCullingRect, OutDrawElements, HighestBlockLayerId, InWidgetStyle, bParentEnabled);
+				HighestLayerId = FMath::Max(HighestLayerId, HighestOverlayLayerId);
+			}
+
+			return HighestLayerId;
+		}
+
+	private:
+		FFINSlateTextLayout(SWidget* InOwner, FTextBlockStyle InDefaultTextStyle) :
+			FSlateTextLayout(InOwner, MoveTemp(InDefaultTextStyle)) {}
+	};
+}
+
 int32 FFINTabRun::CalcCharacterTillNextTabStop(const FString& Text, int32 Offset, int32 TabWidth) {
 	int32 LastTab;
 	int32 CharsSinceLastTab = Offset;
@@ -195,7 +284,7 @@ void SFINLuaCodeEditor::Construct(const FArguments& InArgs) {
 					.HScrollBar(HScrollBar)
 					.VScrollBar(VScrollBar)
 					.CreateSlateTextLayout_Lambda([this](SWidget* InOwningWidget, const FTextBlockStyle& InDefaultTextStyle) {
-						TextLayout = FSlateTextLayout::Create(InOwningWidget, InDefaultTextStyle);
+						TextLayout = FFINSlateTextLayout::Create(InOwningWidget, InDefaultTextStyle);
 						return TextLayout.ToSharedRef();
 					})
 					.OnIsTypedCharValid_Lambda([](const TCHAR) {
@@ -250,14 +339,11 @@ int32 SFINLuaCodeEditor::OnPaint(const FPaintArgs& Args, const FGeometry& Allott
 	
 	float LineNumberWidth = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(FString::FromInt(TextLayout->GetLineViews().Num()), Style->LineNumberStyle.Font, 1).X;
 	LineNumberWidth += 5.0;
-	FGeometry CodeGeometry = AllottedGeometry.MakeChild(AllottedGeometry.GetLocalSize() - FVector2D(LineNumberWidth, 0), FSlateLayoutTransform(FVector2D(LineNumberWidth, 0)));
-	FSlateRect CodeRect = MyCullingRect.ExtendBy(FMargin(LineNumberWidth, 0, 0, 0));
-
 	const float InverseScale = Inverse(AllottedGeometry.Scale);
-	int LineNumber = 0;
+	const TPair<int32, int32> VisibleLines = GetVisibleLineViewRange(*TextLayout);
 	OutDrawElements.PushClip(FSlateClippingZone(AllottedGeometry));
-	for (const FTextLayout::FLineView& LineView : TextLayout->GetLineViews()) {
-		++LineNumber;
+	for (int32 LineIndex = VisibleLines.Key; LineIndex < VisibleLines.Value; ++LineIndex) {
+		const FTextLayout::FLineView& LineView = TextLayout->GetLineViews()[LineIndex];
 		const FVector2D LocalLineOffset = LineView.Offset * InverseScale;
 		const FSlateRect LineViewRect(AllottedGeometry.GetRenderBoundingRect(FSlateRect(LocalLineOffset * FVector2D(0, 1), LocalLineOffset + (LineView.Size * InverseScale))));
 		if ( !FSlateRect::DoRectanglesIntersect(LineViewRect, MyCullingRect)) {
@@ -265,7 +351,7 @@ int32 SFINLuaCodeEditor::OnPaint(const FPaintArgs& Args, const FGeometry& Allott
 		}
 
 		FPaintGeometry LineGeo = AllottedGeometry.ToPaintGeometry(FSlateLayoutTransform(TransformPoint(InverseScale, LineView.Offset)));
-		FSlateDrawElement::MakeText(OutDrawElements, LayerId++, LineGeo, FText::FromString(FString::FromInt(LineNumber)), Style->LineNumberStyle.Font, ESlateDrawEffect::None, Style->LineNumberStyle.ColorAndOpacity.GetColor(InWidgetStyle));
+		FSlateDrawElement::MakeText(OutDrawElements, LayerId++, LineGeo, FText::FromString(FString::FromInt(LineIndex + 1)), Style->LineNumberStyle.Font, ESlateDrawEffect::None, Style->LineNumberStyle.ColorAndOpacity.GetColor(InWidgetStyle));
 	}
 	OutDrawElements.PopClip();
 	
