@@ -92,10 +92,12 @@ void AFINFileSystemState_Legacy::SerializePath(TSharedRef<CodersFileSystem::Devi
 			DiskChilds.erase(stdChildName);
 		}
 
-		CodersFileSystem::FileType ChildType = *SerializeDevice->fileType(Path / stdChildName);
 		int Type = 0;
-		if (ChildType == CodersFileSystem::File_Regular) Type = 1;
-		if (ChildType == CodersFileSystem::File_Directory) Type = 2;
+		if (bIsSaving) {
+			TOptional<CodersFileSystem::FileType> ChildType = SerializeDevice->fileType(Path / stdChildName);
+			if (ChildType.IsSet() && *ChildType == CodersFileSystem::File_Regular) Type = 1;
+			if (ChildType.IsSet() && *ChildType == CodersFileSystem::File_Directory) Type = 2;
+		}
 		Child.EnterField(TEXT("Type")) << Type;
 		TOptional<CodersFileSystem::FileType> existingType = SerializeDevice->fileType(Path / stdChildName);
 		if (Type == 1) {
