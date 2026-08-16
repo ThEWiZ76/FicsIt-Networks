@@ -25,7 +25,7 @@ private:
 	TSharedPtr<FFINTraceStep, ESPMode::ThreadSafe> Step = nullptr;
 
 	UPROPERTY()
-	UObject* Obj = nullptr;
+	mutable TObjectPtr<UObject> Obj = nullptr;
 
 public:
 	static TSharedPtr<FFINTraceStep, ESPMode::ThreadSafe> fallbackTraceStep;
