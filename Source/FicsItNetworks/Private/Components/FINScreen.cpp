@@ -7,6 +7,7 @@
 
 AFINScreen::AFINScreen() {
 	WidgetComponent = CreateDefaultSubobject<UWidgetComponent>("WidgetComponent");
+	WidgetComponent->SetManuallyRedraw(true);
 	WidgetComponent->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 	
 	Connector = CreateDefaultSubobject<UFINAdvancedNetworkConnectionComponent>("Connector");
@@ -92,12 +93,17 @@ void AFINScreen::SetWidget(TSharedPtr<SWidget> widget) {
 	Widget = widget;
 
 	WidgetComponent->SetSlateWidget(widget);
+	WidgetComponent->RequestRedraw();
 	
 	OnWidgetUpdate.Broadcast();
 }
 
 TSharedPtr<SWidget> AFINScreen::GetWidget() const {
 	return Widget;
+}
+
+void AFINScreen::RequestRedraw() {
+	WidgetComponent->RequestRedraw();
 }
 
 void AFINScreen::netFunc_getSize(int& w, int& h) {

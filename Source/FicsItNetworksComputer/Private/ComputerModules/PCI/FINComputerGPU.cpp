@@ -77,6 +77,11 @@ TScriptInterface<IFINScreenInterface> AFINComputerGPU::GetScreenInterface() {
 	return Screen.GetUnderlyingPtr();
 }
 
+void AFINComputerGPU::RequestScreenRedraw() {
+	TScriptInterface<IFINScreenInterface> ScreenInterface = GetScreenInterface();
+	if (ScreenInterface) ScreenInterface->RequestRedraw();
+}
+
 TSharedPtr<SWidget> AFINComputerGPU::CreateWidget() {
 	return nullptr;
 }

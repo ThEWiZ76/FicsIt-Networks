@@ -251,6 +251,7 @@ void AFINComputerGPUT2::Tick(float DeltaSeconds) {
 			Client_FlushDrawCalls();
 		}
 	} else if (bFlushOverNetwork) {
+		RequestScreenRedraw();
 		Client_CleanDrawCalls();
 		bFlushOverNetwork = false;
 		for (const FFIRInstancedStruct& DrawCall : FrontBufferDrawCalls) {
@@ -473,5 +474,6 @@ void AFINComputerGPUT2::Client_AddDrawCallChunk_Implementation(const TArray<FFIR
 void AFINComputerGPUT2::Client_FlushDrawCalls_Implementation() {
 	if (HasAuthority()) return;
 	FlushDrawCalls();
+	RequestScreenRedraw();
 }
 

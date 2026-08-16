@@ -40,6 +40,8 @@ public:
 	UFUNCTION()
 	TScriptInterface<IFINScreenInterface> GetScreenInterface();
 
+	void RequestScreenRedraw();
+
 	/**
      * Creates a new widget for use in the screen.
      * Does *not* tell the screen to use it.

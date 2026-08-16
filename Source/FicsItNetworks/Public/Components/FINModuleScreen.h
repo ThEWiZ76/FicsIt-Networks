@@ -43,5 +43,6 @@ public:
 	virtual FFIRTrace GetGPU() const override;
 	virtual void SetWidget(TSharedPtr<SWidget> widget) override;
 	virtual TSharedPtr<SWidget> GetWidget() const override;
+	virtual void RequestRedraw() override;
 	// End IFINScreen
 };

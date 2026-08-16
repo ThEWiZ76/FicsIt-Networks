@@ -4,6 +4,7 @@
 
 AFINModuleScreen::AFINModuleScreen() {
 	WidgetComponent = CreateDefaultSubobject<UWidgetComponent>("WidgetComponent");
+	WidgetComponent->SetManuallyRedraw(true);
 	WidgetComponent->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
 
 	PrimaryActorTick.bCanEverTick = true;
@@ -42,9 +43,14 @@ void AFINModuleScreen::SetWidget(TSharedPtr<SWidget> widget) {
 	if (Widget == widget) return;
 	Widget = widget;
 	WidgetComponent->SetSlateWidget(widget);
+	WidgetComponent->RequestRedraw();
 	OnWidgetUpdate.Broadcast();
 }
 
 TSharedPtr<SWidget> AFINModuleScreen::GetWidget() const {
 	return Widget;
+}
+
+void AFINModuleScreen::RequestRedraw() {
+	WidgetComponent->RequestRedraw();
 }

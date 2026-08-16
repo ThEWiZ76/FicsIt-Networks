@@ -48,4 +48,7 @@ public:
 	 * @return	the currently cached widget
 	 */
 	virtual TSharedPtr<SWidget> GetWidget() const = 0;
+
+	/** Requests a new render of a manually redrawn world-screen widget. */
+	virtual void RequestRedraw() {}
 };

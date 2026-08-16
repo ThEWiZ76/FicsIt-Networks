@@ -196,6 +196,7 @@ void AFINComputerGPUT1::Multicast_EndBackBufferReplication_Implementation() {
 	if (!HasAuthority()) {
 		FrontBuffer = BackBuffer;
 		if (CachedInvalidation) CachedInvalidation->InvalidateRootChildOrder();
+		RequestScreenRedraw();
 		UE_LOG(LogFicsItNetworksComputer, Display, TEXT("GPU T1: Replication took %f"), FPlatformTime::Seconds() - ReplicateStart);
 	}
 }
@@ -228,6 +229,7 @@ void AFINComputerGPUT1::Tick(float DeltaSeconds) {
 			}
 		} else if (bShouldReplicate) {
 			if (CachedInvalidation) CachedInvalidation->InvalidateRootChildOrder();
+			RequestScreenRedraw();
 			bShouldReplicate = false;
 			Multicast_BeginBackBufferReplication(BackBuffer.GetSize());
 			ToReplicate = FrontBuffer.GetData();
@@ -302,6 +304,7 @@ void AFINComputerGPUT1::OnRep_FrontBuffer() {
 		CachedInvalidation->InvalidateRootChildOrder();
 		CachedInvalidation->InvalidateScreenPosition();
 	}
+	RequestScreenRedraw();
 }
 
 void AFINComputerGPUT1::netSig_OnMouseDown_Implementation(int x, int y, int btn) {}

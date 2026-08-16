@@ -72,6 +72,7 @@ public:
 	FFIRTrace GetGPU() const override;
 	void SetWidget(TSharedPtr<SWidget> widget) override;
 	TSharedPtr<SWidget> GetWidget() const override;
+	void RequestRedraw() override;
 	// End IFINScreenInterface
 
 	// Begin FIN Reflection
