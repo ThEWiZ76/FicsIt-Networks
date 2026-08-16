@@ -60,9 +60,29 @@ public:
 	UFUNCTION(BlueprintCallable, Server, Reliable)
 	void SetLabel(UFGInventoryComponent* Inventory, int32 Index, const FString& Label);
 
-	UFUNCTION(BlueprintCallable, Server, Reliable, Category="FINLua|RCO")
+	UFUNCTION(BlueprintCallable, Category="FINLua|RCO")
 	void SetTextEEPROMCode(class UFGInventoryComponent* Inventory, int32 Index, const FString& NewCode);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_ItemStateUpdated(class UFGInventoryComponent* Inventory, int32 Index, FFIRInstancedStruct state);
+
+private:
+	static constexpr int32 TextEEPROMCodeChunkSize = 16 * 1024;
+
+	TWeakObjectPtr<class UFGInventoryComponent> PendingTextEEPROMInventory;
+	int32 PendingTextEEPROMIndex = INDEX_NONE;
+	int32 PendingTextEEPROMExpectedLength = 0;
+	FString PendingTextEEPROMCode;
+
+	UFUNCTION(Server, Reliable)
+	void Server_BeginTextEEPROMCodeTransfer(class UFGInventoryComponent* Inventory, int32 Index, int32 ExpectedLength);
+
+	UFUNCTION(Server, Reliable)
+	void Server_AppendTextEEPROMCodeChunk(const FString& Chunk);
+
+	UFUNCTION(Server, Reliable)
+	void Server_FinishTextEEPROMCodeTransfer();
+
+	void ApplyTextEEPROMCode(class UFGInventoryComponent* Inventory, int32 Index, const FString& NewCode);
+	void ResetTextEEPROMCodeTransfer();
 };

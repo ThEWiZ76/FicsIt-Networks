@@ -7,6 +7,7 @@
 #include "ComputerModules/FINComputerDriveHolder.h"
 #include "ComputerModules/PCI/FINComputerGPUT1.h"
 #include "ComputerModules/PCI/FINComputerGPUT2.h"
+#include "Engine/World.h"
 #include "FicsItKernel/Processor/FINStateEEPROM_Legacy.h"
 #include "Net/UnrealNetwork.h"
 
@@ -140,9 +141,62 @@ void UFINComputerRCO::SetLabel_Implementation(UFGInventoryComponent* Inventory, 
 	}
 }
 
-void UFINComputerRCO::SetTextEEPROMCode_Implementation(UFGInventoryComponent* Inventory, int32 Index, const FString& NewCode) {
+void UFINComputerRCO::SetTextEEPROMCode(UFGInventoryComponent* Inventory, int32 Index, const FString& NewCode) {
+	if (!IsValid(Inventory)) return;
+
+	const UWorld* World = GetWorld();
+	if (!World || World->GetNetMode() != NM_Client) {
+		ApplyTextEEPROMCode(Inventory, Index, NewCode);
+		return;
+	}
+
+	Server_BeginTextEEPROMCodeTransfer(Inventory, Index, NewCode.Len());
+	for (int32 Offset = 0; Offset < NewCode.Len(); Offset += TextEEPROMCodeChunkSize) {
+		Server_AppendTextEEPROMCodeChunk(NewCode.Mid(Offset, TextEEPROMCodeChunkSize));
+	}
+	Server_FinishTextEEPROMCodeTransfer();
+}
+
+void UFINComputerRCO::Server_BeginTextEEPROMCodeTransfer_Implementation(UFGInventoryComponent* Inventory, int32 Index, int32 ExpectedLength) {
+	ResetTextEEPROMCodeTransfer();
+	if (!IsValid(Inventory) || ExpectedLength < 0) return;
+
+	FInventoryStack Stack;
+	if (!Inventory->GetStackFromIndex(Index, Stack)) return;
+
+	PendingTextEEPROMInventory = Inventory;
+	PendingTextEEPROMIndex = Index;
+	PendingTextEEPROMExpectedLength = ExpectedLength;
+}
+
+void UFINComputerRCO::Server_AppendTextEEPROMCodeChunk_Implementation(const FString& Chunk) {
+	if (!PendingTextEEPROMInventory.IsValid()) return;
+
+	const int32 RemainingLength = PendingTextEEPROMExpectedLength - PendingTextEEPROMCode.Len();
+	if (RemainingLength < 0 || Chunk.Len() > TextEEPROMCodeChunkSize || Chunk.Len() > RemainingLength) {
+		ResetTextEEPROMCodeTransfer();
+		return;
+	}
+
+	PendingTextEEPROMCode.Append(Chunk);
+}
+
+void UFINComputerRCO::Server_FinishTextEEPROMCodeTransfer_Implementation() {
+	UFGInventoryComponent* Inventory = PendingTextEEPROMInventory.Get();
+	if (!IsValid(Inventory) || PendingTextEEPROMCode.Len() != PendingTextEEPROMExpectedLength) {
+		ResetTextEEPROMCodeTransfer();
+		return;
+	}
+
+	const int32 Index = PendingTextEEPROMIndex;
+	FString NewCode = MoveTemp(PendingTextEEPROMCode);
+	ResetTextEEPROMCodeTransfer();
+	ApplyTextEEPROMCode(Inventory, Index, NewCode);
+}
+
+void UFINComputerRCO::ApplyTextEEPROMCode(UFGInventoryComponent* Inventory, int32 Index, const FString& NewCode) {
 	FInventoryStack stack;
-	if (!Inventory->GetStackFromIndex(Index, stack)) return;
+	if (!IsValid(Inventory) || !Inventory->GetStackFromIndex(Index, stack)) return;
 	UFINComputerEEPROMDesc::CreateEEPROMStateInItem(stack.Item);
 	if (const FFINItemStateEEPROMText* luaState = stack.Item.GetItemState().GetValuePtr<FFINItemStateEEPROMText>()) {
 		FFINItemStateEEPROMText state = *luaState;
@@ -150,6 +204,13 @@ void UFINComputerRCO::SetTextEEPROMCode_Implementation(UFGInventoryComponent* In
 		Inventory->SetStateOnIndex(Index, FFGDynamicStruct(state));
 		Inventory->OnSlotUpdatedDelegate.Broadcast(Index);
 	}
+}
+
+void UFINComputerRCO::ResetTextEEPROMCodeTransfer() {
+	PendingTextEEPROMInventory.Reset();
+	PendingTextEEPROMIndex = INDEX_NONE;
+	PendingTextEEPROMExpectedLength = 0;
+	PendingTextEEPROMCode.Empty();
 }
 
 void UFINComputerRCO::Multicast_ItemStateUpdated_Implementation(class UFGInventoryComponent* Inventory, int32 Index, FFIRInstancedStruct state) {
