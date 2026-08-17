@@ -111,8 +111,7 @@ bool FFIRTrace::Serialize(FStructuredArchive::FSlot Slot) {
 
 void FFIRTrace::AddStructReferencedObjects(FReferenceCollector& ReferenceCollector) const {
 	if (Obj) {
-		TObjectPtr<const UObject> Object = Obj;
-		ReferenceCollector.AddReferencedObject(Object);
+		ReferenceCollector.AddReferencedObject(Obj);
 	}
 	if (Prev.IsValid()) {
 		Prev->AddStructReferencedObjects(ReferenceCollector);
