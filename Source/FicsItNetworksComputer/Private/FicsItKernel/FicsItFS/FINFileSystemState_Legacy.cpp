@@ -48,7 +48,6 @@ int AskForDiskOrSave_Legacy(FString Name) {
 #define CheckKeepDisk(Condition) \
 	if (bIsLoading && KeepDisk == -1) { \
 		if (Condition) KeepDisk = AskForDiskOrSave_Legacy(Name); \
-		if (KeepDisk == 1) return; \
 	}
 
 void AFINFileSystemState_Legacy::SerializePath(TSharedRef<CodersFileSystem::Device> SerializeDevice, FStructuredArchive::FRecord Record, CodersFileSystem::Path Path, FString Name, int& KeepDisk) {
@@ -64,7 +63,10 @@ void AFINFileSystemState_Legacy::SerializePath(TSharedRef<CodersFileSystem::Devi
 		ChildNodeNum = childs.size();
 	}
 	FStructuredArchive::FArray ChildNodes = Record.EnterArray(TEXT("ChildNodes"), ChildNodeNum);
-	std::unordered_set<std::string> DiskChilds = SerializeDevice->children(Path);
+	std::unordered_set<std::string> DiskChilds;
+	if (!bIsLoading || KeepDisk != KEEP_CHANGES) {
+		DiskChilds = SerializeDevice->children(Path);
+	}
 	CheckKeepDisk(DiskChilds.size() != ChildNodeNum);
 	if (KeepDisk == 0) {
 		for (std::string DiskChild : DiskChilds) {
@@ -99,7 +101,10 @@ void AFINFileSystemState_Legacy::SerializePath(TSharedRef<CodersFileSystem::Devi
 			if (ChildType.IsSet() && *ChildType == CodersFileSystem::File_Directory) Type = 2;
 		}
 		Child.EnterField(TEXT("Type")) << Type;
-		TOptional<CodersFileSystem::FileType> existingType = SerializeDevice->fileType(Path / stdChildName);
+		TOptional<CodersFileSystem::FileType> existingType;
+		if (!bIsLoading || KeepDisk != KEEP_CHANGES) {
+			existingType = SerializeDevice->fileType(Path / stdChildName);
+		}
 		if (Type == 1) {
 			CheckKeepDisk(!existingType.IsSet() || *existingType != CodersFileSystem::File_Regular)
 			if (KeepDisk == 0) {
@@ -144,9 +149,10 @@ void AFINFileSystemState_Legacy::SerializePath(TSharedRef<CodersFileSystem::Devi
 			if (KeepDisk == 0) {
 				SerializeDevice->remove(Path / stdChildName, true);
 			}
-			SerializeDevice->createDir(Path / stdChildName);
+			if (!bIsLoading || KeepDisk != KEEP_CHANGES) {
+				SerializeDevice->createDir(Path / stdChildName);
+			}
 			SerializePath(SerializeDevice, Child, Path / stdChildName, Name, KeepDisk);
-			if (KeepDisk == 1) return;
 		}
 	}
 }
