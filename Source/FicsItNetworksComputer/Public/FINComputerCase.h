@@ -95,7 +95,7 @@ public:
 	// End IFGSaveInterface
 
 	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_OnEEPROMChanged(FFIRInstancedStruct state);
+	void Multicast_OnEEPROMChanged();
 
 	UFUNCTION(BlueprintCallable, Category = "Network|Computer")
     void AddProcessor(AFINComputerProcessor* processor);

@@ -3,6 +3,7 @@
 #include "FGPlayerController.h"
 #include "FINComputerRCO.h"
 #include "FicsItKernel/Processor/FINItemStateEEPROM.h"
+#include "FicsItKernel/Processor/FINItemStateEEPROMText.h"
 #include "FicsItKernel/Processor/FINStateEEPROM_Legacy.h"
 
 bool UFINComputerEEPROMDesc::CopyData_Implementation(UObject* WorldContext, const FInventoryItem& InFrom, const FInventoryItem& InTo, FInventoryItem& OutItem) {
@@ -38,12 +39,20 @@ FFGDynamicStruct UFINComputerEEPROMDesc::GetEEPROM(UFGInventoryComponent* Inv, i
 	if (!IsValid(desc)) return FFGDynamicStruct();
 
 	if (stack.Item.HasState()) {
+		if (stack.Item.GetItemState().GetValuePtr<FFINItemStateEEPROMText>()) {
+			AFGPlayerController* Controller = Cast<AFGPlayerController>(Inv->GetWorld()->GetFirstPlayerController());
+			if (Controller) {
+				if (UFINComputerRCO* RCO = Cast<UFINComputerRCO>(Controller->GetRemoteCallObjectOfClass(UFINComputerRCO::StaticClass()))) {
+					RCO->RequestTextEEPROMCode(Inv, SlotIdx);
+				}
+			}
+		}
 		return stack.Item.GetItemState();
 	} else {
 		AFGPlayerController* Controller = Cast<AFGPlayerController>(Inv->GetWorld()->GetFirstPlayerController());
 		if (Controller) {
 			UFINComputerRCO* RCO = Cast<UFINComputerRCO>(Controller->GetRemoteCallObjectOfClass(UFINComputerRCO::StaticClass()));
-			RCO->CreateEEPROMState(Inv, SlotIdx);
+			if (RCO) RCO->CreateEEPROMState(Inv, SlotIdx);
 			return stack.Item.GetItemState();
 		}
 	}

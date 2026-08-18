@@ -8,6 +8,6 @@ USTRUCT(BlueprintType)
 struct FICSITNETWORKSCOMPUTER_API FFINItemStateEEPROMText : public FFINItemStateEEPROM {
 	GENERATED_BODY()
 
-	UPROPERTY(SaveGame, BlueprintReadWrite)
+	UPROPERTY(SaveGame, NotReplicated, BlueprintReadWrite)
 	FString Code;
 };

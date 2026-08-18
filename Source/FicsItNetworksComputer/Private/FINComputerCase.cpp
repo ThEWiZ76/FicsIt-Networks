@@ -223,8 +223,15 @@ void AFINComputerCase::PostLoadGame_Implementation(int32 saveVersion, int32 game
 	AddModules(modules);
 }
 
-void AFINComputerCase::Multicast_OnEEPROMChanged_Implementation(FFIRInstancedStruct state) {
-	OnEEPROMUpdate.Broadcast(state.ToDynamicStruct());
+void AFINComputerCase::Multicast_OnEEPROMChanged_Implementation() {
+	if (!HasAuthority()) {
+		if (AFGPlayerController* Controller = Cast<AFGPlayerController>(GetWorld()->GetFirstPlayerController())) {
+			if (UFINComputerRCO* RCO = Cast<UFINComputerRCO>(Controller->GetRemoteCallObjectOfClass(UFINComputerRCO::StaticClass()))) {
+				RCO->InvalidateTextEEPROMCode(DataStorage, 0);
+			}
+		}
+	}
+	OnEEPROMUpdate.Broadcast(GetEEPROM());
 }
 
 void AFINComputerCase::AddProcessor(AFINComputerProcessor* processor) {
@@ -357,7 +364,9 @@ void AFINComputerCase::OnEEPROMChanged(int32 Index) {
 	switch (Index) {
 		case 0: {
 			if (HasAuthority()) {
-				Multicast_OnEEPROMChanged(GetEEPROM());
+				Multicast_OnEEPROMChanged();
+			} else {
+				OnEEPROMUpdate.Broadcast(GetEEPROM());
 			}
 			break;
 		} case 1: {

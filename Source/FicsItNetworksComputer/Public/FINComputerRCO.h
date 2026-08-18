@@ -63,6 +63,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="FINLua|RCO")
 	void SetTextEEPROMCode(class UFGInventoryComponent* Inventory, int32 Index, const FString& NewCode);
 
+	void RequestTextEEPROMCode(class UFGInventoryComponent* Inventory, int32 Index);
+	void InvalidateTextEEPROMCode(class UFGInventoryComponent* Inventory, int32 Index);
+
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_ItemStateUpdated(class UFGInventoryComponent* Inventory, int32 Index, FFIRInstancedStruct state);
 
@@ -74,6 +77,15 @@ private:
 	int32 PendingTextEEPROMExpectedLength = 0;
 	FString PendingTextEEPROMCode;
 
+	TWeakObjectPtr<class UFGInventoryComponent> RequestedTextEEPROMInventory;
+	int32 RequestedTextEEPROMIndex = INDEX_NONE;
+	TWeakObjectPtr<class UFGInventoryComponent> ReceivingTextEEPROMInventory;
+	int32 ReceivingTextEEPROMIndex = INDEX_NONE;
+	int32 ReceivingTextEEPROMExpectedLength = 0;
+	FString ReceivingTextEEPROMCode;
+	TWeakObjectPtr<class UFGInventoryComponent> SynchronizedTextEEPROMInventory;
+	int32 SynchronizedTextEEPROMIndex = INDEX_NONE;
+
 	UFUNCTION(Server, Reliable)
 	void Server_BeginTextEEPROMCodeTransfer(class UFGInventoryComponent* Inventory, int32 Index, int32 ExpectedLength);
 
@@ -83,6 +95,19 @@ private:
 	UFUNCTION(Server, Reliable)
 	void Server_FinishTextEEPROMCodeTransfer();
 
+	UFUNCTION(Server, Reliable)
+	void Server_RequestTextEEPROMCode(class UFGInventoryComponent* Inventory, int32 Index);
+
+	UFUNCTION(Client, Reliable)
+	void Client_BeginTextEEPROMCodeTransfer(class UFGInventoryComponent* Inventory, int32 Index, int32 ExpectedLength);
+
+	UFUNCTION(Client, Reliable)
+	void Client_AppendTextEEPROMCodeChunk(const FString& Chunk);
+
+	UFUNCTION(Client, Reliable)
+	void Client_FinishTextEEPROMCodeTransfer();
+
 	void ApplyTextEEPROMCode(class UFGInventoryComponent* Inventory, int32 Index, const FString& NewCode);
 	void ResetTextEEPROMCodeTransfer();
+	void ResetReceivingTextEEPROMCodeTransfer();
 };
