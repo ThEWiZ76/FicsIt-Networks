@@ -39,7 +39,7 @@ namespace FINLua {
 				if (lua_isstring(L, 2)) Player = luaFIN_checkFString(L, 2);
 				for (auto players = world->GetPlayerControllerIterator(); players; ++players) {
 					AFGPlayerController* PlayerController = Cast<AFGPlayerController>(players->Get());
-					if (Player.IsSet() && PlayerController->GetPlayerState<AFGPlayerState>()->GetUserName() != *Player) continue;
+					if (Player.IsSet() && PlayerController->GetPlayerState<AFGPlayerState>()->GetPlayerName() != *Player) continue;
 					AsyncTask(ENamedThreads::GameThread, [PlayerController, Text]() {
 						PlayerController->GetGameUI()->ShowTextNotification(FText::FromString(Text));
 					});
@@ -67,7 +67,7 @@ namespace FINLua {
 				if (lua_isstring(L, 2)) Player = luaFIN_checkFString(L, 2);
 				for (auto players = world->GetPlayerControllerIterator(); players; players++) {
 					AFGPlayerController* PlayerController = Cast<AFGPlayerController>(players->Get());
-					if (Player.IsSet() && PlayerController->GetPlayerState<AFGPlayerState>()->GetUserName() != *Player) continue;
+					if (Player.IsSet() && PlayerController->GetPlayerState<AFGPlayerState>()->GetPlayerName() != *Player) continue;
 					runtime.TickActions.Enqueue([PlayerController, Position]() {
 						AsyncTask(ENamedThreads::GameThread, [PlayerController, Position]() {
 							UClass* Class = LoadObject<UClass>(nullptr, TEXT("/Game/FactoryGame/Character/Player/BP_AttentionPingActor.BP_AttentionPingActor_C"));
