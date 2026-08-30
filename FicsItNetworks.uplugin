@@ -104,5 +104,5 @@
 			"LoadingPolicy": "Always"
 		}
 	],
-	"GameVersion": ">=502094"
+	"GameVersion": "=502094"
 }
