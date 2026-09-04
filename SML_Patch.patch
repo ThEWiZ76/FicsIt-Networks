@@ -253,10 +253,11 @@ index a9b9dad0..8bb81867 100644
  
  	class UFGMaterialEffect_Build* GetActiveBuildEffect();
  
-@@ -663,6 +643,14 @@ public:
+@@ -663,6 +643,16 @@ public:
  	/** Creates lightweight instance data for a lightweight buildable representation of this buildable. Will be called on the CDO! */
  	virtual void CreateLightweightBuildableInstanceData( const struct FFGDynamicStruct& typeSpecificData, TArray<FInstanceData>& outLightweightInstanceData ) const;
  
++protected:
 +	UFUNCTION()
 +	virtual void OnBuildEffectFinished();
 +	virtual void OnLegacyBuildEffectFinished();
@@ -265,6 +266,7 @@ index a9b9dad0..8bb81867 100644
 +	virtual void NetMulticast_Dismantle();
 +	virtual void OnDismantleEffectFinished();
 +
++public:
  	/** True if default customization application logic should run on buildable and its hologram meshes */
  	FORCEINLINE bool ShouldApplyCustomizationData() const { return mShouldApplyCustomizationData; }
  protected:
