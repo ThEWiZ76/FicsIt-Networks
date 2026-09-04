@@ -1,38 +1,360 @@
+diff --git a/Source/FactoryGame/Private/Buildables/FGBuildable.cpp b/Source/FactoryGame/Private/Buildables/FGBuildable.cpp
+index 44feeaf7..ea8235aa 100644
+--- a/Source/FactoryGame/Private/Buildables/FGBuildable.cpp
++++ b/Source/FactoryGame/Private/Buildables/FGBuildable.cpp
+@@ -473,12 +473,12 @@ void AFGBuildable::BeginPlay()
+ 	{
+ 		if(!bForceLegacyBuildEffect)
+ 		{
+-			ExecutePlayBuildActorEffects();
++			PlayBuildEffect();
+ 		}
+ 		else
+ 		{
+ 			// ! Legacy build effect, only used in super rare cases we shouldn't rely on this!
+-			ExecutePlayBuildEffects();
++			PlayLegacyBuildEffect();
+ 		}
+ 	}
+ 
+@@ -1753,18 +1753,7 @@ void AFGBuildable::StopIsLookedAtForConnection( class AFGCharacterPlayer* byChar
+ 		outline->HideOutline( this );
+ 	}
+ }
+-void AFGBuildable::PlayBuildEffects( AActor* inInstigator )
+-{
+-	// Don't play effects on hidden integrated buildables. i.e. hub upgrades.
+-	if( !GetRootComponent()->IsVisible() )
+-	{
+-		return;
+-	}
+-
+-	mBuildEffectInstignator = inInstigator;
+-}
+-
+-void AFGBuildable::ExecutePlayBuildEffects()
++void AFGBuildable::PlayLegacyBuildEffect()
+ {
+ 	if( ShouldSkipBuildEffect() )
+ 	{
+@@ -1823,7 +1812,7 @@ void AFGBuildable::ExecutePlayBuildEffects()
+ 		
+ 		mActiveBuildEffect->SetTransform( GetActorTransform() );
+ 		mActiveBuildEffect->SetSpeed( mBuildEffectSpeed );
+-		mActiveBuildEffect->mOnEnded.BindUObject( this, &AFGBuildable::OnBuildEffectFinished );
++		mActiveBuildEffect->mOnEnded.BindUObject( this, &AFGBuildable::OnLegacyBuildEffectFinished );
+ 		mActiveBuildEffect->RegisterComponent();
+ 
+ 		mBuildEffectIsPlaying = true;
+@@ -1838,7 +1827,7 @@ void AFGBuildable::ExecutePlayBuildEffects()
+ 	}
+ }
+ 
+-void AFGBuildable::OnBuildEffectFinished()
++void AFGBuildable::OnLegacyBuildEffectFinished()
+ {
+ 	mBuildEffectInstignator = nullptr;
+ 	mActiveBuildEffect = nullptr;
+@@ -1885,7 +1874,7 @@ void AFGBuildable::OnBuildEffectFinished()
+ 	FlushNetDormancy();
+ }
+ 
+-bool AFGBuildable::HandleBlueprintSpawnedBuildEffect( AFGBuildEffectActor* inBuildEffectActor )
++void AFGBuildable::SetPlayingBuildEffectActor( AFGBuildEffectActor* inBuildEffectActor )
+ {
+ 	if( !ManagedByLightweightBuildableSubsystem() || mReplicatedBuiltInsideBlueprintDesigner )
+ 	{
+@@ -1895,7 +1884,7 @@ bool AFGBuildable::HandleBlueprintSpawnedBuildEffect( AFGBuildEffectActor* inBui
+ 			CallSetupInstances();
+ 			RegisterWithBackgroundThread();
+ 		
+-			return false;
++			return;
+ 		}
+ 
+ 		CallSetupInstances(true );
+@@ -1919,23 +1908,11 @@ bool AFGBuildable::HandleBlueprintSpawnedBuildEffect( AFGBuildEffectActor* inBui
+ #endif
+ 
+ 	// there are specific binds for certain classes, we call a different on finished for spline buildables for example.
+-	inBuildEffectActor->GetBind( GetClass() ).AddDynamic( this, &AFGBuildable::OnBuildEffectActorFinished );
++	inBuildEffectActor->GetBind( GetClass() ).AddDynamic( this, &AFGBuildable::OnBuildEffectFinished );
+ 	
+-	return true;
+ }
+ 
+-void AFGBuildable::PlayBuildEffectActor( AActor* inInstigator )
+-{
+-	// Don't play effects on hidden integrated buildables. i.e. hub upgrades.
+-	if( !GetRootComponent()->IsVisible() )
+-	{
+-		return;
+-	}
+-
+-	mBuildEffectInstignator = inInstigator;
+-}
+-
+-void AFGBuildable::ExecutePlayBuildActorEffects()
++void AFGBuildable::PlayBuildEffect()
+ {
+ 	if( ShouldSkipBuildEffect() )
+ 	{
+@@ -1969,7 +1946,7 @@ void AFGBuildable::ExecutePlayBuildActorEffects()
+ 	AFGBuildableSubsystem::RequestBuildEffectActor( this, BuildEffectActor, BuildEffectTemplate, GetActorTransform(), mBuildEffectInstignator, bForceBuildEffectSolo );
+ 	BuildEffectActor->SetActor( this );
+ 	BuildEffectActor->SetRecipe( *mBuiltWithRecipe, this );
+-	BuildEffectActor->GetBind(GetClass()).AddDynamic(this, &AFGBuildable::OnBuildEffectActorFinished);
++	BuildEffectActor->GetBind(GetClass()).AddDynamic(this, &AFGBuildable::OnBuildEffectFinished);
+ 	mBuildEffectIsPlaying = true;
+ 	mBuildEffectActor = BuildEffectActor;
+ 	// Start is auto called next frame.
+@@ -1982,7 +1959,7 @@ void AFGBuildable::ExecutePlayBuildActorEffects()
+ 	SetActorHiddenInGame( true );
+ }
+ 
+-void AFGBuildable::OnBuildEffectActorFinished()
++void AFGBuildable::OnBuildEffectFinished()
+ {
+ 	if( ShouldConvertToLightweight() && mBlueprintBuildEffectIsPlaying )
+ 	{
+@@ -3109,4 +3086,4 @@ void AFGBuildable::SetBuildableDisplayName( TSubclassOf< AFGBuildable > inClass,
+ 	}
+ }
+ 
+-#undef LOCTEXT_NAMESPACE
+\ No newline at end of file
++#undef LOCTEXT_NAMESPACE
+diff --git a/Source/FactoryGame/Private/Buildables/FGBuildableElevator.cpp b/Source/FactoryGame/Private/Buildables/FGBuildableElevator.cpp
+index 7cfe9c89..128f4ec9 100644
+--- a/Source/FactoryGame/Private/Buildables/FGBuildableElevator.cpp
++++ b/Source/FactoryGame/Private/Buildables/FGBuildableElevator.cpp
+@@ -39,8 +39,8 @@ void AFGBuildableElevator::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
+ 	DOREPLIFETIME(AFGBuildableElevator, mElevatorState);
+ }
+ int32 AFGBuildableElevator::GetDismantleRefundReturnsMultiplier() const{ return Super::GetDismantleRefundReturnsMultiplier(); }
++void AFGBuildableElevator::OnLegacyBuildEffectFinished(){ Super::OnLegacyBuildEffectFinished(); }
+ void AFGBuildableElevator::OnBuildEffectFinished(){ Super::OnBuildEffectFinished(); }
+-void AFGBuildableElevator::OnBuildEffectActorFinished(){ Super::OnBuildEffectActorFinished(); }
+ void AFGBuildableElevator::GetDismantleDisqualifiers_Implementation(TArray<TSubclassOf<UFGConstructDisqualifier>>& out_dismantleDisqualifiers, const TArray<AActor*>& allSelectedActors) const{ Super::GetDismantleDisqualifiers_Implementation(out_dismantleDisqualifiers, allSelectedActors); }
+ void AFGBuildableElevator::GetChildDismantleActors_Implementation(TArray<AActor*>& out_ChildDismantleActors) const{ Super::GetChildDismantleActors_Implementation(out_ChildDismantleActors); }
+ bool AFGBuildableElevator::CanDismantle_Implementation() const{ return Super::CanDismantle_Implementation(); }
+diff --git a/Source/FactoryGame/Private/Buildables/FGBuildableFactory.cpp b/Source/FactoryGame/Private/Buildables/FGBuildableFactory.cpp
+index 2d7dc39c..bc71396f 100644
+--- a/Source/FactoryGame/Private/Buildables/FGBuildableFactory.cpp
++++ b/Source/FactoryGame/Private/Buildables/FGBuildableFactory.cpp
+@@ -89,8 +89,8 @@ void AFGBuildableFactory::UnregisterInteractingPlayer_Implementation( AFGCharact
+ void AFGBuildableFactory::GetConditionalReplicatedProps(TArray<FFGCondReplicatedProperty>& outProps) const{ }
+ bool AFGBuildableFactory::IsPropertyRelevantForConnection(UNetConnection* netConnection, const FProperty* property) const{ return bool(); }
+ void AFGBuildableFactory::Factory_Tick(float dt){ }
++void AFGBuildableFactory::OnLegacyBuildEffectFinished(){ }
+ void AFGBuildableFactory::OnBuildEffectFinished(){ }
+-void AFGBuildableFactory::OnBuildEffectActorFinished(){ }
+ void AFGBuildableFactory::Dismantle_Implementation(){ }
+ TArray< UFGFactoryConnectionComponent* > AFGBuildableFactory::GetConnectionComponents() const{ return TArray<UFGFactoryConnectionComponent*>(); }
+ float AFGBuildableFactory::GetEmissivePower(){ return float(); }
+diff --git a/Source/FactoryGame/Private/Buildables/FGBuildableRailroadSignal.cpp b/Source/FactoryGame/Private/Buildables/FGBuildableRailroadSignal.cpp
+index 0d234718..f742af71 100644
+--- a/Source/FactoryGame/Private/Buildables/FGBuildableRailroadSignal.cpp
++++ b/Source/FactoryGame/Private/Buildables/FGBuildableRailroadSignal.cpp
+@@ -34,8 +34,8 @@ void AFGBuildableRailroadSignal::GetLifetimeReplicatedProps(TArray< FLifetimePro
+ void AFGBuildableRailroadSignal::BeginPlay(){ Super::BeginPlay(); }
+ void AFGBuildableRailroadSignal::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
+ void AFGBuildableRailroadSignal::Destroyed(){ Super::Destroyed(); }
++void AFGBuildableRailroadSignal::OnLegacyBuildEffectFinished(){ }
+ void AFGBuildableRailroadSignal::OnBuildEffectFinished(){ }
+-void AFGBuildableRailroadSignal::OnBuildEffectActorFinished(){ }
+ void AFGBuildableRailroadSignal::PostLoadGame_Implementation(int32 saveVersion, int32 gameVersion){ }
+ void AFGBuildableRailroadSignal::GainedSignificance_Implementation(){ }
+ void AFGBuildableRailroadSignal::LostSignificance_Implementation(){ }
+diff --git a/Source/FactoryGame/Private/Buildables/FGBuildableRailroadSwitchControl.cpp b/Source/FactoryGame/Private/Buildables/FGBuildableRailroadSwitchControl.cpp
+index a3592017..af5e8fa4 100644
+--- a/Source/FactoryGame/Private/Buildables/FGBuildableRailroadSwitchControl.cpp
++++ b/Source/FactoryGame/Private/Buildables/FGBuildableRailroadSwitchControl.cpp
+@@ -20,8 +20,8 @@ void AFGBuildableRailroadSwitchControl::GetLifetimeReplicatedProps(TArray<FLifet
+ }
+ void AFGBuildableRailroadSwitchControl::BeginPlay(){ Super::BeginPlay(); }
+ void AFGBuildableRailroadSwitchControl::EndPlay(const EEndPlayReason::Type endPlayReason){ Super::EndPlay(endPlayReason); }
++void AFGBuildableRailroadSwitchControl::OnLegacyBuildEffectFinished(){ }
+ void AFGBuildableRailroadSwitchControl::OnBuildEffectFinished(){ }
+-void AFGBuildableRailroadSwitchControl::OnBuildEffectActorFinished(){ }
+ void AFGBuildableRailroadSwitchControl::GainedSignificance_Implementation(){ }
+ void AFGBuildableRailroadSwitchControl::LostSignificance_Implementation(){ }
+ void AFGBuildableRailroadSwitchControl::PostLoadGame_Implementation(int32 saveVersion, int32 gameVersion){ Super::PostLoadGame_Implementation(saveVersion, gameVersion); }
+diff --git a/Source/FactoryGame/Private/Buildables/FGBuildableSignSupport.cpp b/Source/FactoryGame/Private/Buildables/FGBuildableSignSupport.cpp
+index ecf4b3c0..1266ec25 100644
+--- a/Source/FactoryGame/Private/Buildables/FGBuildableSignSupport.cpp
++++ b/Source/FactoryGame/Private/Buildables/FGBuildableSignSupport.cpp
+@@ -15,7 +15,7 @@ void AFGBuildableSignSupport::GetLifetimeReplicatedProps(TArray< FLifetimeProper
+ 	DOREPLIFETIME(AFGBuildableSignSupport, mPoleScale);
+ }
+ void AFGBuildableSignSupport::SetPoleScale(const FVector2D& poleScale){ }
+-void AFGBuildableSignSupport::OnBuildEffectActorFinished(){ }
++void AFGBuildableSignSupport::OnBuildEffectFinished(){ }
+ bool AFGBuildableSignSupport::CanBeSampled_Implementation() const{ return Super::CanBeSampled_Implementation(); }
+ struct FInstanceData AFGBuildableSignSupport::CreatePoleInstanceData(int32 variationIndex) const{ return Super::CreatePoleInstanceData(variationIndex); }
+ void AFGBuildableSignSupport::OnRep_PoleScale(){ }
+diff --git a/Source/FactoryGame/Private/Buildables/FGBuildableWidgetSign.cpp b/Source/FactoryGame/Private/Buildables/FGBuildableWidgetSign.cpp
+index 31909262..93e54681 100644
+--- a/Source/FactoryGame/Private/Buildables/FGBuildableWidgetSign.cpp
++++ b/Source/FactoryGame/Private/Buildables/FGBuildableWidgetSign.cpp
+@@ -42,8 +42,8 @@ void AFGBuildableWidgetSign::GainedSignificance_Implementation(){ }
+ void AFGBuildableWidgetSign::LostSignificance_Implementation(){ }
+ UFGFactoryClipboardSettings* AFGBuildableWidgetSign::CopySettings_Implementation(){ return nullptr; }
+ bool AFGBuildableWidgetSign::PasteSettings_Implementation(UFGFactoryClipboardSettings* settings, class AFGPlayerController* player){ return bool(); }
++void AFGBuildableWidgetSign::OnLegacyBuildEffectFinished(){ }
+ void AFGBuildableWidgetSign::OnBuildEffectFinished(){ }
+-void AFGBuildableWidgetSign::OnBuildEffectActorFinished(){ }
+ void AFGBuildableWidgetSign::SetPrefabSignData(FPrefabSignData& signData, bool bFilterText){ }
+ void AFGBuildableWidgetSign::GetSignPrefabData(FPrefabSignData& out_signData) const{ }
+ void AFGBuildableWidgetSign::UpdateSignElements(FPrefabSignData& prefabSignData){ }
 diff --git a/Source/FactoryGame/Public/Buildables/FGBuildable.h b/Source/FactoryGame/Public/Buildables/FGBuildable.h
-index 2215e41afb..7935ac6089 100644
+index a9b9dad0..8bb81867 100644
 --- a/Source/FactoryGame/Public/Buildables/FGBuildable.h
 +++ b/Source/FactoryGame/Public/Buildables/FGBuildable.h
-@@ -504,7 +504,7 @@ public:
- 	FORCEINLINE TArray<FBox> GetOcclusionBoxes() const  									{ return mOcclusionBoxInfo; }
- 	FORCEINLINE float GetOcclusionShapeCustomScaleOffset() const 							{ return mScaleCustomOffset; }
- 	FORCEINLINE EFGRainOcclusionShapeScaling GetOcclusionShapeCustomScalingMode() const		{ return mCustomScaleType; }
--	FORCEINLINE virtual FSimpleBuildingInfo GetRainOcclusionShape()							{ return FSimpleBuildingInfo(this); }
-+	FORCEINLINE virtual FSimpleBuildingInfo GetRainOcclusionShape()							{ return FSimpleBuildingInfo(); }
+@@ -384,37 +384,17 @@ public:
+ 	void Stat_StockInventory( TArray< FItemAmount >& out_amount ) const;
+ 	// End FFactoryStatHelpers Functions
  
- 	/* Not replicated! */
- 	void ToggleInstanceVisibility( bool bNewState );
-diff --git a/Source/FactoryGame/Public/FGRailroadSignalBlock.h b/Source/FactoryGame/Public/FGRailroadSignalBlock.h
-index c00ac8d210..3bb40273cd 100644
---- a/Source/FactoryGame/Public/FGRailroadSignalBlock.h
-+++ b/Source/FactoryGame/Public/FGRailroadSignalBlock.h
-@@ -180,6 +180,7 @@ private:
-  */
- struct FACTORYGAME_API FFGRailroadSignalBlock : public TSharedFromThis< FFGRailroadSignalBlock >
- {
-+	friend class FIRRailroadHelper;
- public:
- 	/**
- 	 * Called bu the tracks when a vehicle enters and exits a section of track.
+-	/**
+-	 * Build/Dismantle Effects
+-	 * @param instigator Actor who triggered the effect (i.e. where to throw the resources from).
+-	 */
+-	UFUNCTION( BlueprintCallable, Category = "Buildable|Build Effect" )
+-	virtual void PlayBuildEffects( AActor* inInstigator );
+-	virtual void ExecutePlayBuildEffects();
+-	virtual void OnBuildEffectFinished();
++	/** Build/Dismantle Effects */
++	virtual void PlayBuildEffect();
++	virtual void SetPlayingBuildEffectActor( AFGBuildEffectActor* buildEffectActor );
++	virtual void PlayLegacyBuildEffect();
+ 
+ 	/** Called when the build effect is finished to notify the blueprints */
+ 	UFUNCTION( BlueprintImplementableEvent, Category = "Buildable|Build Effect", DisplayName = "On Build Effect Finished" )
+ 	void K2_OnBuildEffectFinished();
+-
+-	UFUNCTION( BlueprintCallable, Category = "Buildable|Build Effect" )
+-	virtual void PlayBuildEffectActor( AActor* inInstigator );
+-
+-	UFUNCTION()
+-	virtual void ExecutePlayBuildActorEffects();
+ 	
+-	UFUNCTION()
+-	virtual void OnBuildEffectActorFinished();
+-
+-	/*Handles logic for blueprint / zooping build effect behaviour, returns true when it should be a part of the multi
+-	 * build effect actor, false when it shouldn't */
+-	virtual bool HandleBlueprintSpawnedBuildEffect( AFGBuildEffectActor* inBuildEffectActor );
+-
+-	UFUNCTION( Reliable, NetMulticast )
+-	virtual void NetMulticast_Dismantle();
+ 	void CloseAllInteractUIsWithBuildable() const;
+ 	void PlayDismantleEffects();
+-	virtual void OnDismantleEffectFinished();
+ 
+ 	class UFGMaterialEffect_Build* GetActiveBuildEffect();
+ 
+@@ -663,6 +643,14 @@ public:
+ 	/** Creates lightweight instance data for a lightweight buildable representation of this buildable. Will be called on the CDO! */
+ 	virtual void CreateLightweightBuildableInstanceData( const struct FFGDynamicStruct& typeSpecificData, TArray<FInstanceData>& outLightweightInstanceData ) const;
+ 
++	UFUNCTION()
++	virtual void OnBuildEffectFinished();
++	virtual void OnLegacyBuildEffectFinished();
++
++	UFUNCTION( Reliable, NetMulticast )
++	virtual void NetMulticast_Dismantle();
++	virtual void OnDismantleEffectFinished();
++
+ 	/** True if default customization application logic should run on buildable and its hologram meshes */
+ 	FORCEINLINE bool ShouldApplyCustomizationData() const { return mShouldApplyCustomizationData; }
+ protected:
+diff --git a/Source/FactoryGame/Public/Buildables/FGBuildableElevator.h b/Source/FactoryGame/Public/Buildables/FGBuildableElevator.h
+index e1c809a9..5e1aaf31 100644
+--- a/Source/FactoryGame/Public/Buildables/FGBuildableElevator.h
++++ b/Source/FactoryGame/Public/Buildables/FGBuildableElevator.h
+@@ -35,8 +35,8 @@ public:
+ 
+ 	// Begin AFGBuildable Interface
+ 	virtual int32 GetDismantleRefundReturnsMultiplier() const override;
++	virtual void OnLegacyBuildEffectFinished() override;
+ 	virtual void OnBuildEffectFinished() override;
+-	virtual void OnBuildEffectActorFinished() override;
+ 	// End AFGBuildable Interface
+ 
+ 	// Begin IFGDistmantleInterface
+@@ -516,4 +516,4 @@ private:
+ 		
+ 		return InstanceData;
+ 	}
+-};
+\ No newline at end of file
++};
+diff --git a/Source/FactoryGame/Public/Buildables/FGBuildableFactory.h b/Source/FactoryGame/Public/Buildables/FGBuildableFactory.h
+index 14901cda..da96e33b 100644
+--- a/Source/FactoryGame/Public/Buildables/FGBuildableFactory.h
++++ b/Source/FactoryGame/Public/Buildables/FGBuildableFactory.h
+@@ -68,8 +68,8 @@ public:
+ 	// End Factory_ interface
+ 	
+ 	// Begin FGBuildable
++	virtual void OnLegacyBuildEffectFinished() override;
+ 	virtual void OnBuildEffectFinished() override;
+-	virtual void OnBuildEffectActorFinished() override;
+ 	virtual void Dismantle_Implementation() override;
+ 	// End FGBuildable
+ 
+diff --git a/Source/FactoryGame/Public/Buildables/FGBuildableRailroadSignal.h b/Source/FactoryGame/Public/Buildables/FGBuildableRailroadSignal.h
+index 455c4129..98ce96c9 100644
+--- a/Source/FactoryGame/Public/Buildables/FGBuildableRailroadSignal.h
++++ b/Source/FactoryGame/Public/Buildables/FGBuildableRailroadSignal.h
+@@ -47,8 +47,8 @@ public:
+ 	// End Actor
+ 
+ 	// Begin FGBuildable
++	virtual void OnLegacyBuildEffectFinished() override;
+ 	virtual void OnBuildEffectFinished() override;
+-	virtual void OnBuildEffectActorFinished() override;
+ 	virtual bool ShouldBeConsideredForBase_Implementation() override { return false; }
+ 	// End FGBuildable
+ 
 diff --git a/Source/FactoryGame/Public/Buildables/FGBuildableRailroadSwitchControl.h b/Source/FactoryGame/Public/Buildables/FGBuildableRailroadSwitchControl.h
-index 99025de9bf..13945dbd65 100644
+index a8787da3..7f23a3a6 100644
 --- a/Source/FactoryGame/Public/Buildables/FGBuildableRailroadSwitchControl.h
 +++ b/Source/FactoryGame/Public/Buildables/FGBuildableRailroadSwitchControl.h
-@@ -7,6 +7,8 @@
- #include "FGUseableInterface.h"
- #include "FGBuildableRailroadSwitchControl.generated.h"
+@@ -38,8 +38,8 @@ public:
+ 	// End AActor interface
  
-+class UFGRailroadTrackConnectionComponent;
-+
- /**
-  * Struct containing packaged switch data so we can get an OnRep for them as a group.
-  */
+ 	// Begin FGBuildable
++	virtual void OnLegacyBuildEffectFinished() override;
+ 	virtual void OnBuildEffectFinished() override;
+-	virtual void OnBuildEffectActorFinished() override;
+ 	// End FGBuildable
+ 
+ 	//Begin IFGSignificanceInterface
+diff --git a/Source/FactoryGame/Public/Buildables/FGBuildableSignSupport.h b/Source/FactoryGame/Public/Buildables/FGBuildableSignSupport.h
+index 43c9e0d0..0474547e 100644
+--- a/Source/FactoryGame/Public/Buildables/FGBuildableSignSupport.h
++++ b/Source/FactoryGame/Public/Buildables/FGBuildableSignSupport.h
+@@ -21,7 +21,7 @@ public:
+ 
+ 	/** Sets an optional scale to scale the x/y values of the pole by */
+ 	virtual void SetPoleScale( const FVector2D& poleScale );
+-	virtual void OnBuildEffectActorFinished() override;
++	virtual void OnBuildEffectFinished() override;
+ 
+ 	virtual bool CanBeSampled_Implementation() const override;
+ 
+diff --git a/Source/FactoryGame/Public/Buildables/FGBuildableWidgetSign.h b/Source/FactoryGame/Public/Buildables/FGBuildableWidgetSign.h
+index 0f8970ca..42fca014 100644
+--- a/Source/FactoryGame/Public/Buildables/FGBuildableWidgetSign.h
++++ b/Source/FactoryGame/Public/Buildables/FGBuildableWidgetSign.h
+@@ -93,8 +93,8 @@ public:
+ 	bool PasteSettings_Implementation( UFGFactoryClipboardSettings* settings, class AFGPlayerController* player ) override;
+ 	//~ End IFGFactoryClipboardInterface
+ 
++	virtual void OnLegacyBuildEffectFinished() override;
+ 	virtual void OnBuildEffectFinished() override;
+-	virtual void OnBuildEffectActorFinished() override;
+ 	
+ 	// When a text element is updated, this call will update that element and set the save data
+ 	UFUNCTION( BlueprintCallable, Category = "WidgetSign" )
