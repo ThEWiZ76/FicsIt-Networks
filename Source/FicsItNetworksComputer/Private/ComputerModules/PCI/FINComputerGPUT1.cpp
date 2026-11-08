@@ -64,8 +64,26 @@ int32 SScreenMonitor::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedG
 	FSlateFontInfo FontToUse = Font.Get();
 	
 	for (int Y = 0; Y < Height; ++Y) {
+		// Backgrounds are cell-aligned; merge equal neighbours without changing glyph placement.
+		for (int X = 0; X < Width;) {
+			const int RunStart = X;
+			const FLinearColor Color = Buf->Get(X++, Y).BackgroundColor;
+			while (X < Width && Buf->Get(X, Y).BackgroundColor == Color) {
+				++X;
+			}
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				LayerId,
+				AllottedGeometry.ToPaintGeometry(CharSize * FVector2D(X - RunStart, 1), FSlateLayoutTransform(1, FVector2D(RunStart, Y) * CharSize)),
+				&boxBrush,
+				ESlateDrawEffect::None,
+				Color);
+		}
 		for (int X = 0; X < Width; ++X) {
 			const FFINGPUT1BufferPixel& Pixel = Buf->Get(X, Y);
+			if (FChar::IsWhitespace(Pixel.Character)) {
+				continue;
+			}
 			
 			FString Char = FString::Chr(Pixel.Character);
 			if (Char.TrimStartAndEnd().Len() > 0) FSlateDrawElement::MakeText(
@@ -77,13 +95,6 @@ int32 SScreenMonitor::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedG
                 ESlateDrawEffect::None,
                 Pixel.ForegroundColor
             );
-			FSlateDrawElement::MakeBox(
-				OutDrawElements,
-				LayerId,
-				AllottedGeometry.ToPaintGeometry(CharSize*1, FSlateLayoutTransform(1, FVector2D(X, Y) * CharSize)),
-				&boxBrush,
-				ESlateDrawEffect::None,
-				Pixel.BackgroundColor);
 		}
 	}
 	return LayerId+1;
